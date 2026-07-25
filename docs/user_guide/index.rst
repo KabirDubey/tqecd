@@ -11,3 +11,10 @@ User Guide
    Quick start <quick_start>
    Basic concepts <basic_concepts>
    Example <../media/detectors/detector_finding_illustration.ipynb>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Developer tools
+
+   Gadget experiment workflow <experiment_workflow>
+   Experiment configuration <experiment_configuration>

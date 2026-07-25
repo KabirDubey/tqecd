@@ -48,6 +48,9 @@ extensions = [
     # An extension allowing the inclusion of Jupyter notebooks.
     # https://nbsphinx.readthedocs.io/en/0.9.3/
     "nbsphinx",
+    # Grids, cards and dropdowns for the docs
+    # https://sphinx-design.readthedocs.io/
+    "sphinx_design",
 ]
 
 templates_path = ["_templates"]
