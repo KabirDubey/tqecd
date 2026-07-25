@@ -39,6 +39,7 @@ def _score(
     radius: int,
     window: int,
     config: ExperimentConfig,
+    oracles: Sequence[Any],
 ) -> ExperimentRow:
     row = ExperimentRow(
         gadget_id=unit.gadget_id,
@@ -65,7 +66,7 @@ def _score(
     checks = [ok for ok in (row.parities_ok, row.distance_ok) if ok is not None]
     row.predictors_pass = all(checks) if checks else None
 
-    for oracle in config.enabled_oracles():
+    for oracle in oracles:
         if oracle.applies(unit, config):
             verdict = oracle.compare(reannotated, oracle.reference(unit, k, native))
             row.oracle_verdicts[oracle.name] = verdict.to_dict()
@@ -77,6 +78,8 @@ def run_experiment(
     inputs: Sequence[str | Path | Any],
     config: ExperimentConfig,
     out_dir: str | Path,
+    *,
+    oracles: Sequence[Any] = (),
 ) -> ExperimentReport:
     """Run a batched gadget experiment and write ``report.{json,html,txt}`` under ``out_dir``.
 
@@ -85,12 +88,16 @@ def run_experiment(
             straight to ``tqec.orchestration.prepare_batch``.
         config: experiment knobs (conventions, ks, windows, manhattan radii, predictors, oracles).
         out_dir: directory for the run artifacts and the report.
+        oracles: optional user-supplied reference oracles (objects) compared up to logical
+            symmetry; merged with any registered by name in ``config.oracles``. Ground truth
+            is opt-in and often absent, so this defaults to empty.
 
     Returns:
         The :class:`ExperimentReport` (already written to disk).
     """
     from tqec.orchestration import prepare_batch
 
+    active_oracles = [*oracles, *config.enabled_oracles()]
     out_dir = Path(out_dir)
     rows: list[ExperimentRow] = []
     last_manifest = None
@@ -120,7 +127,9 @@ def run_experiment(
                 for window in config.windows:
                     reannotated = annotate.reannotate(native, window=window)
                     rows.append(
-                        _score(native, reannotated, unit, k, radius, window, config)
+                        _score(
+                            native, reannotated, unit, k, radius, window, config, active_oracles
+                        )
                     )
 
     report = ExperimentReport(

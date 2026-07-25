@@ -15,7 +15,7 @@ def _report() -> ExperimentReport:
                 k=1, manhattan_radius=2, window=2, status="ready",
                 missing_parities=0, parities_ok=True, distance=3, expected_distance=3,
                 distance_ok=True, predictors_pass=True, native_missing=0,
-                oracle_verdicts={"native_fixed_bulk": {"equivalent": True}},
+                oracle_verdicts={"user_ref": {"equivalent": True}},
             ),
             ExperimentRow(
                 gadget_id="g1", source="mem", name="cnot", convention="fixed_bulk",
