@@ -1,4 +1,4 @@
-"""``experiment`` -- run batched experiments over gadgets using ``tqec.orchestration``.
+"""``experiment``--run batched experiments over gadgets using ``tqec.orchestration``.
 
 A developer tool (living outside ``src/tqecd``, so ``tqecd`` itself never depends on ``tqec``):
 it hands gadgets to ``tqec.orchestration.prepare_batch``, re-annotates each prepared circuit with

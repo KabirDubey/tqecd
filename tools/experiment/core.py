@@ -1,4 +1,4 @@
-"""``run_experiment`` -- drive ``prepare_batch``, re-annotate, and score each prepared circuit.
+"""``run_experiment``--drive ``prepare_batch``, re-annotate, and score each prepared circuit.
 
 This is the only module (besides :mod:`tools.experiment.simulate`) that imports ``tqec``. It is
 a pure downstream consumer of ``tqec.orchestration``: ``prepare_batch`` does the splitting,

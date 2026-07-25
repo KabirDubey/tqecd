@@ -1,7 +1,7 @@
 """The gadget-experiment battery (needs the optional ``tqec`` dependency).
 
-Every assertion checks ground-truth-free invariants -- zero missing parities and distance
-``== 2k + 1`` for the re-annotated circuits -- never native-equality. The invariant under test is:
+Every assertion checks ground-truth-free invariants--zero missing parities and distance
+``== 2k + 1`` for the re-annotated circuits--never native-equality. The invariant under test is:
 **every prepared (READY) unit passes the predictors**; units ``tqec`` cannot compile yet (e.g.
 spatial Hadamard on ``fixed_bulk``) are recorded as non-ready and excluded, not failed.
 """
@@ -106,7 +106,7 @@ def test_progressively_larger_gadgets(out_dir):
     assert len({r.gadget_id for r in ready}) == 2
 
 
-# 6. FINAL A -- every arrangement of a Hadamard pipe --------------------------
+# 6. FINAL A--every arrangement of a Hadamard pipe --------------------------
 def test_hadamard_arrangements_all_directions(out_dir):
     graphs = hadamard_arrangements()
     assert set(graphs) == set(HADAMARD_DIRECTIONS)
@@ -120,10 +120,10 @@ def test_hadamard_arrangements_all_directions(out_dir):
     assert {r.convention for r in z_ready} == {"fixed_bulk", "fixed_boundary"}
 
 
-# 7. FINAL B -- sensitivity to manhattan_radius -------------------------------
+# 7. FINAL B--sensitivity to manhattan_radius -------------------------------
 def test_manhattan_radius_sweep(out_dir):
     # Sweeps the radius knob and records the (radius -> native_missing / distance) response. For a
-    # simple gadget like cnot the response is flat (radius-insensitive) -- itself a correct,
+    # simple gadget like cnot the response is flat (radius-insensitive)--itself a correct,
     # reportable result; harder gadgets are where a small radius starves the native annotation.
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
                               manhattan_radii=(1, 2, 3))

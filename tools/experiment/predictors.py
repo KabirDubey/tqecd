@@ -3,11 +3,11 @@
 These are objective functions, not ground truth (see ``README.md``): they measure absolute
 properties of a single circuit without comparing it to any reference annotation.
 
-* :func:`missing_parities` -- GF(2) flow-completeness: are all deterministic measurement
+* :func:`missing_parities`--GF(2) flow-completeness: are all deterministic measurement
   parities the circuit guarantees actually captured by its emitted ``DETECTOR`` / ``OBSERVABLE``
   set? A nonzero result is a parity the annotator failed to attach. Strictly stronger than
   distance.
-* :func:`shortest_graphlike_error` -- the code distance of the noisy circuit, compared to the
+* :func:`shortest_graphlike_error`--the code distance of the noisy circuit, compared to the
   expected ``2k + 1``.
 """
 
