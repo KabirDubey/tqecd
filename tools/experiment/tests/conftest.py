@@ -1,4 +1,4 @@
-"""Shared fixtures. Requires an installed ``tqec`` (orchestration); skips the whole battery if
+"""Shared fixtures. Requires an installed ``tqec`` (orchestration); skips these tests if
 absent, so a bare ``tqecd`` checkout without the optional ``tqec`` dep still collects cleanly."""
 
 from __future__ import annotations

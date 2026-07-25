@@ -1,6 +1,6 @@
 # `experiment` -- batched gadget experiments over `tqec.orchestration`
 
-A developer tool for exercising `tqecd`'s detector annotation across a battery of gadgets. It
+A developer tool for exercising `tqecd`'s detector annotation across many gadgets. It
 consumes `tqec.orchestration.prepare_batch`, re-annotates each prepared circuit with `tqecd`, and
 measures how well the annotation performs.
 
@@ -46,6 +46,6 @@ Full usage and configuration reference:
 pytest tools/experiment/tests -q
 ```
 
-The battery checks absolute invariants -- zero missing parities and distance `== 2k+1` for every
+The tests check absolute invariants -- zero missing parities and distance `== 2k+1` for every
 prepared (READY) unit -- never native-equality. Units `tqec` cannot compile yet are recorded
 non-ready, not failed.

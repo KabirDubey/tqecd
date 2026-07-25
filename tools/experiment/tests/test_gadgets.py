@@ -1,4 +1,4 @@
-"""The gadget-experiment battery (needs the optional ``tqec`` dependency).
+"""Gadget experiment tests (need the optional ``tqec`` dependency).
 
 Every assertion checks ground-truth-free invariants--zero missing parities and distance
 ``== 2k + 1`` for the re-annotated circuits--never native-equality. The invariant under test is:

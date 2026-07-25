@@ -39,4 +39,4 @@ def test_observable_records_and_reattach_roundtrip():
 
 
 # reannotate() calls tqecd's fragment matcher, which requires a real QEC circuit (not a toy
-# reset/measure snippet); that path is exercised on real prepared gadgets in test_battery.py.
+# reset/measure snippet); that path is exercised on real prepared gadgets in test_gadgets.py.
