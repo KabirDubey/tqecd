@@ -75,16 +75,23 @@ def test_cnot_open_ports(out_dir):
     _assert_all_ready_pass(report)
 
 
-# Across conventions, with the native_fixed_bulk oracle
-def test_across_conventions_with_oracle(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,),
-                              windows=(2,), oracles=("native_fixed_bulk",))
-    report = run_experiment([cnot(Basis.Z)], config, out_dir)
+# Across conventions, plus an opt-in user-supplied reference oracle
+def test_across_conventions_with_user_oracle(out_dir):
+    from tools.experiment.oracle import CallableOracle
+
+    # Oracles are optional and never default. A user who trusts native for fixed_bulk can wire it
+    # in explicitly; here it echoes the native circuit and applies only to fixed_bulk.
+    user_oracle = CallableOracle(
+        "user_native_fixed_bulk",
+        emit=lambda unit, k, native: native,
+        applies_to=lambda unit, config: unit.convention == "fixed_bulk",
+    )
+    config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,))
+    report = run_experiment([cnot(Basis.Z)], config, out_dir, oracles=[user_oracle])
     ready = _assert_all_ready_pass(report)
     by_conv = {r.convention: r for r in ready}
     assert set(by_conv) == {"fixed_bulk", "fixed_boundary"}
-    # oracle applies to fixed_bulk (equivalent to native) and not to fixed_boundary
-    assert by_conv["fixed_bulk"].oracle_verdicts["native_fixed_bulk"]["equivalent"] is True
+    assert by_conv["fixed_bulk"].oracle_verdicts["user_native_fixed_bulk"]["equivalent"] is True
     assert by_conv["fixed_boundary"].oracle_verdicts == {}
 
 
