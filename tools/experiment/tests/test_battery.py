@@ -44,7 +44,7 @@ def _assert_all_ready_pass(report):
     return ready
 
 
-# 0. reannotate() on a real prepared gadget preserves observables and attaches completely --------
+# reannotate() on a real prepared gadget preserves observables and attaches completely
 def test_reannotate_real_gadget(out_dir):
     manifest = prepare_batch(
         [cnot(Basis.Z)], BatchConfig(conventions=("fixed_bulk",), ks=(1,), manhattan_radius=2),
@@ -58,7 +58,7 @@ def test_reannotate_real_gadget(out_dir):
     assert count_missing_parities(reannotated) == 0
 
 
-# 1. Two CNOTs, different observable bases -------------------------------------
+# Two CNOTs, different observable bases
 def test_two_cnots_different_observables(out_dir):
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2,))
     report = run_experiment([cnot(Basis.X), cnot(Basis.Z)], config, out_dir)
@@ -67,7 +67,7 @@ def test_two_cnots_different_observables(out_dir):
     assert len({r.gadget_id for r in ready}) == 2
 
 
-# 2. One CNOT with open ports --------------------------------------------------
+# One CNOT with open ports
 def test_cnot_open_ports(out_dir):
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
                               logical_observables="all")
@@ -75,7 +75,7 @@ def test_cnot_open_ports(out_dir):
     _assert_all_ready_pass(report)
 
 
-# 3. Across conventions, with the native_fixed_bulk oracle ---------------------
+# Across conventions, with the native_fixed_bulk oracle
 def test_across_conventions_with_oracle(out_dir):
     config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,),
                               windows=(2,), oracles=("native_fixed_bulk",))
@@ -88,7 +88,7 @@ def test_across_conventions_with_oracle(out_dir):
     assert by_conv["fixed_boundary"].oracle_verdicts == {}
 
 
-# 4. Two disjoint CNOTs in one input, swept over k ----------------------------
+# Two disjoint CNOTs in one input, swept over k
 def test_two_disjoint_cnots_split(out_dir):
     graph = disjoint_union(cnot(Basis.Z), cnot(Basis.Z))
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2,))
@@ -97,7 +97,7 @@ def test_two_disjoint_cnots_split(out_dir):
     assert len({r.gadget_id for r in ready}) == 2  # split into two gadgets
 
 
-# 5. cnot + three_cnots in one graph (progressively larger), swept over k -----
+# cnot + three_cnots in one graph (progressively larger), swept over k
 def test_progressively_larger_gadgets(out_dir):
     graph = disjoint_union(cnot(Basis.Z), three_cnots(Basis.Z))
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2,))
@@ -106,7 +106,7 @@ def test_progressively_larger_gadgets(out_dir):
     assert len({r.gadget_id for r in ready}) == 2
 
 
-# 6. FINAL A--every arrangement of a Hadamard pipe --------------------------
+# FINAL A: every arrangement of a Hadamard pipe
 def test_hadamard_arrangements_all_directions(out_dir):
     graphs = hadamard_arrangements()
     assert set(graphs) == set(HADAMARD_DIRECTIONS)
@@ -120,7 +120,7 @@ def test_hadamard_arrangements_all_directions(out_dir):
     assert {r.convention for r in z_ready} == {"fixed_bulk", "fixed_boundary"}
 
 
-# 7. FINAL B--sensitivity to manhattan_radius -------------------------------
+# FINAL B: sensitivity to manhattan_radius
 def test_manhattan_radius_sweep(out_dir):
     # Sweeps the radius knob and records the (radius -> native_missing / distance) response. For a
     # simple gadget like cnot the response is flat (radius-insensitive)--itself a correct,
