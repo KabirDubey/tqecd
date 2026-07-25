@@ -1,0 +1,17 @@
+# Optional gold-standard LER / Lambda mode. Slow (runs a sinter.collect), off by default.
+# Run with:  python -m tools.experiment --config tools/experiment/configs/ler.toml --gallery cnot
+[experiment]
+conventions = ["fixed_bulk"]
+ks = [1, 2, 3]
+windows = [2]
+manhattan_radii = [2]
+predictors = ["parities", "distance"]
+
+[experiment.simulation]
+enabled = true
+noise_models = ["uniform_depolarizing"]
+ps = [0.001, 0.002, 0.004, 0.008]
+max_shots = 20000
+decoders = ["pymatching"]
+plot = true
+lambda_factor = true

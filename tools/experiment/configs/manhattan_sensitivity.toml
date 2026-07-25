@@ -1,0 +1,8 @@
+# FINAL B: response of the predictors to the manhattan_radius knob.
+# Run with:  python -m tools.experiment --config tools/experiment/configs/manhattan_sensitivity.toml
+[experiment]
+conventions = ["fixed_bulk"]
+ks = [1]
+windows = [2]
+manhattan_radii = [1, 2, 3]
+predictors = ["parities", "distance"]

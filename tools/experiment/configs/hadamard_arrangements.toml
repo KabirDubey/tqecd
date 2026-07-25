@@ -1,0 +1,11 @@
+# FINAL A: every arrangement of a spatial & temporal Hadamard pipe.
+# Run with:  python -m tools.experiment --config tools/experiment/configs/hadamard_arrangements.toml
+# (the CLI feeds a cnot by default; this config is primarily consumed by the test battery, which
+# builds the six Hadamard-pipe graphs via tools.experiment.tests.fixtures.hadamard_arrangements)
+[experiment]
+conventions = ["fixed_bulk", "fixed_boundary"]
+ks = [1, 2]
+windows = [2]
+manhattan_radii = [2]
+predictors = ["parities", "distance"]
+oracles = ["native_fixed_bulk"]
