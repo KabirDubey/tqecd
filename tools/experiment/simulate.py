@@ -68,22 +68,29 @@ def _lambda_factor(points: dict[int, list[tuple[float, float]]]) -> float | None
 
 
 def augment(
-    report: ExperimentReport, manifest: Any, config: ExperimentConfig
+    report: ExperimentReport, manifest: Any, config: ExperimentConfig, *, radius: int | None = None
 ) -> ExperimentReport:
-    """Run ``simulate_batch`` and attach per-gadget LER plots + Λ factors to ``report``."""
+    """Run ``simulate_batch`` and attach LER plots + Λ factors, matched by full identity.
+
+    A curve belongs to a ``(gadget_id, convention)`` and is attached only to rows with that
+    identity and the simulated ``radius`` (the LER is independent of the tqecd window), so a
+    plot never lands beside the wrong parameter combination.
+    """
     from tqec.orchestration import simulate_batch
 
     batch_result = simulate_batch(manifest)
 
-    # gadget_id -> {k: [(p, ler)]}
-    curves: dict[str, dict[int, list[tuple[float, float]]]] = defaultdict(
+    # (gadget_id, convention) -> {k: [(p, ler)]}
+    curves: dict[tuple[str, str], dict[int, list[tuple[float, float]]]] = defaultdict(
         lambda: defaultdict(list)
     )
     for unit_result in batch_result.results:
         ler = _ler(unit_result)
         if ler is None:
             continue
-        curves[unit_result.gadget_id][unit_result.k].append((unit_result.p, ler))
+        curves[(unit_result.gadget_id, unit_result.convention)][unit_result.k].append(
+            (unit_result.p, ler)
+        )
 
     report.meta["simulation"] = {
         "aggregate": getattr(batch_result, "aggregate", ""),
@@ -91,12 +98,18 @@ def augment(
         "failures": len(getattr(batch_result, "failures", [])),
     }
 
-    for gadget_id, points in curves.items():
-        plot = _plot_data_uri(points, gadget_id) if config.simulation.plot else None
+    for (gadget_id, convention), points in curves.items():
+        title = f"{gadget_id} [{convention}]"
+        plot = _plot_data_uri(points, title) if config.simulation.plot else None
         lam = _lambda_factor(points) if config.simulation.lambda_factor else None
-        # attach to the first (lowest-k, first radius/window) row of this gadget
+        # attach to the first row with this gadget, convention and simulated radius
         for row in report.rows:
-            if row.gadget_id == gadget_id and row.k >= 0:
+            if (
+                row.gadget_id == gadget_id
+                and row.convention == convention
+                and row.k >= 0
+                and (radius is None or row.manhattan_radius == radius)
+            ):
                 if plot is not None and row.ler_plot is None:
                     row.ler_plot = plot
                 if lam is not None and row.lambda_factor is None:

@@ -125,9 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     else:  # config-only run defaults to a cnot smoke gadget
         inputs = _gallery_graphs("cnot")
 
-    report = run_experiment(inputs, config, args.out)
-    print(report.to_text())
-    print(f"\nwrote {args.out}/report.json, report.html, report.txt")
+    report = run_experiment(inputs, config, args.out)  # prints the console summary + open hint
     s = report.summary()
     return 0 if s["predictors_fail"] == 0 else 1
 

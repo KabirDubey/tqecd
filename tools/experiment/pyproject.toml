@@ -24,7 +24,7 @@ orchestration = ["tqec"]
 # Fast, Rust-backed data & file handling for tabulating / exporting experiment rows.
 analysis = ["polars>=1.0", "orjson>=3.10", "msgspec>=0.18"]
 # Self-contained report.html rendering (matplotlib is already a tqec dependency).
-report = ["minijinja>=2.0", "matplotlib>=3.9"]
+report = ["matplotlib>=3.9", "tqdm>=4.66"]
 # Gold-standard LER / Lambda simulation (sinter comes in via tqec).
 simulation = ["sinter>=1.14", "matplotlib>=3.9"]
 dev = ["pytest>=8.0"]
