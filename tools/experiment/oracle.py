@@ -1,4 +1,4 @@
-"""Reference *oracles* -- ground truth where it legitimately exists (``stim`` + ``numpy``).
+"""Reference *oracles*--ground truth where it legitimately exists (``stim`` + ``numpy``).
 
 The general case has no ground truth: for an arbitrary supplied gadget it may be unknown whether
 *any* detector annotation reaches full distance. But in narrow configurations / circuit

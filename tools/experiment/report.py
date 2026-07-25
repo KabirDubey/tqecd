@@ -60,7 +60,7 @@ class ExperimentReport:
     rows: list[ExperimentRow] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
 
-    # -- summary ----------------------------------------------------------
+    # summary
     def summary(self) -> dict[str, int]:
         scored = [r for r in self.rows if r.predictors_pass is not None]
         return {
@@ -71,7 +71,7 @@ class ExperimentReport:
             "skipped": sum(1 for r in self.rows if r.predictors_pass is None),
         }
 
-    # -- serialization ----------------------------------------------------
+    # serialization
     def to_dict(self) -> dict[str, Any]:
         return {
             "meta": self.meta,
@@ -102,7 +102,7 @@ class ExperimentReport:
         if flat:
             pl.DataFrame(flat).write_csv(out / "report.csv")
 
-    # -- text -------------------------------------------------------------
+    # text
     _COLUMNS = (
         ("gadget_id", "gadget"),
         ("convention", "conv"),
@@ -133,7 +133,7 @@ class ExperimentReport:
         )
         return "\n".join(lines) + footer
 
-    # -- html -------------------------------------------------------------
+    # html
     def to_html(self) -> str:
         rows_html = "\n".join(self._row_html(r) for r in self.rows)
         s = self.summary()

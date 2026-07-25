@@ -1,4 +1,4 @@
-"""``ExperimentConfig`` -- a thin façade that lowers to a ``tqec.orchestration.BatchConfig``.
+"""``ExperimentConfig``--a thin façade that lowers to a ``tqec.orchestration.BatchConfig``.
 
 The ``tqec`` import is deferred into :meth:`ExperimentConfig.to_batch_config` so that importing
 this module (and the ``stim`` + ``tqecd`` + ``numpy`` layers) never requires the optional
@@ -53,7 +53,7 @@ class ExperimentConfig:
     circuit_mode: str = "materialized"
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
 
-    # -- predictor helpers -------------------------------------------------
+    # predictor helpers
     @property
     def run_parities(self) -> bool:
         return "parities" in self.predictors
@@ -67,7 +67,7 @@ class ExperimentConfig:
 
         return build_oracles(list(self.oracles))
 
-    # -- lowering to BatchConfig ------------------------------------------
+    # lowering to BatchConfig
     def to_batch_config(self, *, manhattan_radius: int) -> Any:
         """Lower to a ``tqec.orchestration.BatchConfig`` for one manhattan radius.
 
@@ -92,7 +92,7 @@ class ExperimentConfig:
             logical_observables=self.logical_observables,
         )
 
-    # -- construction -----------------------------------------------------
+    # construction
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ExperimentConfig":
         known = {f for f in cls.__dataclass_fields__}
