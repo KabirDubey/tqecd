@@ -55,6 +55,7 @@ doc = [
     "nbsphinx<=0.9.7",
     "pandoc<=2.4",
     "jupyter<=1.1.1",
+    "sphinx-design<=0.6.1",
 ]
 test = ["pytest<=9.1.0", "mypy<=2.3.0", "pytest-cov<=7.1.0"]
 bench = ["pyinstrument<=5.1.1"]
