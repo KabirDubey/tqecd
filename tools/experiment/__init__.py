@@ -4,8 +4,6 @@ A developer tool (living outside ``src/tqecd``, so ``tqecd`` itself never depend
 it hands gadgets to ``tqec.orchestration.prepare_batch``, re-annotates each prepared circuit with
 ``tqecd``, and measures ground-truth-free predictors (plus reference oracles where valid, and an
 optional gold-standard LER/Lambda mode).
-
-The ``welder`` / ``weld`` name is reserved for a separate future tool.
 """
 
 from tools.experiment.config import ExperimentConfig, SimulationConfig
