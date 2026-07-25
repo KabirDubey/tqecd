@@ -79,7 +79,7 @@ def count_missing_parities(circuit: stim.Circuit) -> int:
     Reduces the circuit's complete deterministic-parity space (``stim`` flow generators with
     trivial input/output) against the annotator's emitted ``DETECTOR`` / ``OBSERVABLE`` subspace
     over GF(2). Returns ``rank([E; C]) - rank(E)``: zero iff every deterministic parity is
-    spanned by the emitted annotations, i.e. the welding is complete.
+    spanned by the emitted annotations, i.e. the annotation is complete.
     """
     emitted = _emitted_subspace(circuit)
     complete = _complete_subspace(circuit)
@@ -100,7 +100,7 @@ def describe_missing_parities(circuit: stim.Circuit) -> str:
     n = count_missing_parities(circuit)
     if n == 0:
         return "complete: every deterministic parity is captured by the annotation"
-    return f"incomplete: {n} deterministic parit{'y' if n == 1 else 'ies'} not welded"
+    return f"incomplete: {n} deterministic parit{'y' if n == 1 else 'ies'} not attached"
 
 
 def shortest_graphlike_error(

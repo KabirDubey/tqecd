@@ -3,8 +3,7 @@
 This layer imports neither :mod:`tqec` nor anything heavier than ``stim`` and ``tqecd`` so that
 it stays independent of the orchestration side and could later migrate into ``tqecd`` proper.
 
-The ``welder`` / ``weld`` terminology is reserved for a separate future tool; the operation here
-is deliberately called :func:`reannotate`.
+The operation here is deliberately called :func:`reannotate`.
 """
 
 from __future__ import annotations
@@ -76,7 +75,7 @@ def reannotate(circuit: stim.Circuit, *, window: int = 2) -> stim.Circuit:
     """Strip annotations, re-run ``tqecd`` detector matching, reattach the observables.
 
     Mirrors ``tqec``'s own compile order (detectors before observables): the logical observables
-    are stripped before matching, so ``tqecd`` never sees them while welding detectors, then they
+    are stripped before matching, so ``tqecd`` never sees them while matching detectors, then they
     are reattached at their original measurement records.
 
     Args:

@@ -4,9 +4,6 @@ A developer tool for exercising `tqecd`'s detector annotation across a battery o
 a thin **consumer** of `tqec.orchestration`: it hands gadgets to `prepare_batch`, re-annotates
 each prepared circuit with `tqecd`, and measures how well the annotation performs.
 
-> The `welder` / `weld` terminology is reserved for a separate future tool. The core action here
-> is `run_experiment(...)`, and the `tqecd`-reannotation step is `reannotate(...)`.
-
 ## Where it lives and why
 
 This tool lives in `tools/experiment/`, **outside `src/tqecd`**. `tqecd` packages only `src/`, so
@@ -23,7 +20,7 @@ kinds of signal, kept distinct:
 1. **Predictors** (`predictors.py`) — cheap, static objective functions on a single circuit:
    - `missing_parities`: GF(2) flow-completeness. Reduces the circuit's complete deterministic
      parity space (stim `flow_generators`, trivial in/out) against the emitted `DETECTOR` /
-     `OBSERVABLE` subspace; a nonzero residual is a parity the annotator failed to weld.
+     `OBSERVABLE` subspace; a nonzero residual is a parity the annotator failed to attach.
    - `shortest_graphlike_error`: code distance of the noisy circuit, compared to `2k + 1`.
 2. **Oracles** (`oracle.py`) — a known-correct reference that legitimately exists in *narrow*
    configurations. There it *is* ground truth, compared up to logical symmetry (same GF(2) parity

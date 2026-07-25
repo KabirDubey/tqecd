@@ -44,7 +44,7 @@ def _assert_all_ready_pass(report):
     return ready
 
 
-# 0. reannotate() on a real prepared gadget preserves observables and welds completely --------
+# 0. reannotate() on a real prepared gadget preserves observables and attaches completely --------
 def test_reannotate_real_gadget(out_dir):
     manifest = prepare_batch(
         [cnot(Basis.Z)], BatchConfig(conventions=("fixed_bulk",), ks=(1,), manhattan_radius=2),
@@ -112,7 +112,7 @@ def test_hadamard_arrangements_all_directions(out_dir):
     assert set(graphs) == set(HADAMARD_DIRECTIONS)
     config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,))
     report = run_experiment(list(graphs.values()), config, out_dir)
-    # every unit tqec could compile welds correctly...
+    # every unit tqec could compile attaches correctly...
     ready = _assert_all_ready_pass(report)
     # ...and temporal (z) Hadamard compiles on both conventions (spatial fixed_bulk is not yet
     # implemented in tqec, so it is legitimately recorded as compile_failed, not asserted here).
@@ -134,5 +134,5 @@ def test_manhattan_radius_sweep(out_dir):
         assert row.missing_parities is not None
         assert row.native_missing is not None
         assert row.distance is not None
-    # reannotated welding is complete at every radius (tqecd uses `window`, not manhattan_radius)
+    # reannotated annotation is complete at every radius (tqecd uses `window`, not manhattan_radius)
     _assert_all_ready_pass(report)
