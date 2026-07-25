@@ -1,0 +1,40 @@
+# Dev-tool package for the `experiment` gadget-testing harness.
+#
+# This is intentionally NOT installed as part of `tqecd` (tqecd packages only `src/`, so this
+# `tools/` tree is excluded from the wheel). It declares its own optional dependencies here so
+# that `tqecd` core never gains a dependency on `tqec`.
+#
+# The `tqec` dependency (which provides `tqec.orchestration`) floors at the branch carrying the
+# batch orchestration interface (`kd/dae-batch-processing`); `tqecd` must carry the windowed
+# detector completion (`feat/yfragmentflow`, the branch this tool stacks on).
+
+[project]
+name = "tqecd-experiment"
+version = "0.0.0"
+description = "Run batched experiments over gadgets using tqec.orchestration"
+requires-python = ">=3.11"
+dependencies = [
+  "stim>=1.14",
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+# The orchestration backend. Pinned to a local checkout via [tool.uv.sources] below.
+orchestration = ["tqec"]
+# Fast, Rust-backed data & file handling for tabulating / exporting experiment rows.
+analysis = ["polars>=1.0", "orjson>=3.10", "msgspec>=0.18"]
+# Self-contained report.html rendering (matplotlib is already a tqec dependency).
+report = ["minijinja>=2.0", "matplotlib>=3.9"]
+# Gold-standard LER / Lambda simulation (sinter comes in via tqec).
+simulation = ["sinter>=1.14", "matplotlib>=3.9"]
+dev = ["pytest>=8.0"]
+
+# The experiment tool consumes the batch interface from a local tqec checkout on the branch that
+# carries `tqec.orchestration`. Point this at your tqec working tree.
+[tool.uv.sources]
+tqec = { path = "../../../tqec", editable = true }
+
+[tool.pytest.ini_options]
+# Keep this suite out of tqecd's own collection; run it explicitly with
+#   pytest tools/experiment/tests
+testpaths = ["tools/experiment/tests"]
