@@ -110,6 +110,10 @@ def shortest_graphlike_error(
 
     The caller is responsible for applying a noise model (kept ``tqec``-free here). Compare the
     result to the expected ``2 * k + 1``.
+
+    This is an analytic minimum-weight search over the detector error model: it does not
+    sample the circuit, so it never invokes the Sinter simulator and stays independent of
+    the optional simulation mode (which is the only sampling path).
     """
     try:
         error = noisy_circuit.shortest_graphlike_error(
