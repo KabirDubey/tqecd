@@ -35,17 +35,24 @@ _ORDER = [NOTIMPL, ERROR, NONDET, PARTIAL, FULL]
 
 
 def spatial_hadamard_arrangements() -> dict:
-    """The spatial-Hadamard pipe pairs from tqec's own compile tests, keyed by a readable label.
+    """Every valid Hadamard arrangement from the desiderata, keyed by a readable label.
 
-    Mirrors ``test_compile_spatial_hadamard_vertical_correlation_surface`` and
-    ``..._horizontal_correlation_surface``: a cube of one kind joined by an auto-inferred Hadamard
-    pipe to a cube of the transformed kind, one step along X or Y.
+    Covers the two-cube pairs (vertical = "regular spatial movement", horizontal = "H on the
+    connecting arm") from tqec's compile tests, a temporal Hadamard, and the spatial junctions
+    (straight-line, L, T, four-way) with a Hadamard on one or more spatial arms. A Hadamard arm is
+    an arm whose cube kind is the Z<->X flip of the junction centre, which makes ``add_pipe`` infer
+    a Hadamard transition on that arm. The junction cases vary whether the Hadamard sits on an
+    x-direction or a y-direction arm -- the distinction the fixed-bulk implementation cares about.
     """
     from tqec.computation.block_graph import BlockGraph
     from tqec.utils.position import Direction3D, Position3D
 
-    def pair(before: str, after: str, direction) -> BlockGraph:
-        g = BlockGraph("spatial_hadamard")
+    flip = str.maketrans("ZX", "XZ")
+    center = "ZZX"
+    offsets = {"+x": (1, 0, 0), "-x": (-1, 0, 0), "+y": (0, 1, 0), "-y": (0, -1, 0)}
+
+    def two_cube(before: str, after: str, direction) -> BlockGraph:
+        g = BlockGraph("pair")
         p0 = Position3D(0, 0, 0)
         p1 = p0.shift_in_direction(direction, 1)
         g.add_cube(p0, before)
@@ -53,29 +60,64 @@ def spatial_hadamard_arrangements() -> dict:
         g.add_pipe(p0, p1)
         return g
 
+    def junction(arms, h_arms) -> BlockGraph:
+        g = BlockGraph("junction")
+        c = Position3D(0, 0, 0)
+        g.add_cube(c, center)
+        for arm in arms:
+            pos = Position3D(*offsets[arm])
+            g.add_cube(pos, center.translate(flip) if arm in h_arms else center)
+            g.add_pipe(c, pos)
+        return g
+
     out: dict = {}
+    # temporal Hadamard (z-direction transition)
+    out["temporal_h"] = two_cube("XZZ", "ZXX", Direction3D.Z)
+    # two-cube pairs: vertical (regular spatial) and horizontal (H on connecting arm)
     for dname, direction in (("x", Direction3D.X), ("y", Direction3D.Y)):
-        before = "ZXZ" if dname == "x" else "XZZ"
-        after = "XZX" if dname == "x" else "ZXX"
-        out[f"vertical_{dname}"] = pair(before, after, direction)
+        out[f"vertical_{dname}"] = two_cube(
+            "ZXZ" if dname == "x" else "XZZ", "XZX" if dname == "x" else "ZXX", direction
+        )
     for obs in ("z", "x"):
         before = "ZZX" if obs == "z" else "XXZ"
         after = "XXZ" if obs == "z" else "ZZX"
         for dname, direction in (("x", Direction3D.X), ("y", Direction3D.Y)):
-            out[f"horizontal_{obs}obs_{dname}"] = pair(before, after, direction)
+            out[f"horizontal_{obs}obs_{dname}"] = two_cube(before, after, direction)
+    # spatial junctions with a Hadamard on an x- vs a y-direction arm
+    shapes = {
+        "straightline": ["+y", "-y"],
+        "straightline_x": ["+x", "-x"],
+        "L": ["+x", "+y"],
+        "T": ["+y", "-x", "+x"],
+        "fourway": ["+x", "-x", "+y", "-y"],
+    }
+    out["straightline_Hy"] = junction(shapes["straightline"], {"+y"})
+    out["straightline_Hx"] = junction(shapes["straightline_x"], {"+x"})
+    out["L_Hy"] = junction(shapes["L"], {"+y"})
+    out["L_Hx"] = junction(shapes["L"], {"+x"})
+    out["T_Hy"] = junction(shapes["T"], {"+y"})
+    out["T_Hx"] = junction(shapes["T"], {"+x"})
+    out["fourway_Hy"] = junction(shapes["fourway"], {"+y"})
+    out["fourway_Hx"] = junction(shapes["fourway"], {"+x"})
+    out["fourway_H2y"] = junction(shapes["fourway"], {"+y", "-y"})  # two Hadamard y-arms
     return out
-
 
 def probe(label: str, out_json: str) -> None:
     """Compile + re-annotate every spatial-Hadamard arrangement under the importable tqec."""
     warnings.filterwarnings("ignore")
     from tqec import compile_block_graph
     from tqec.compile.convention import ALL_CONVENTIONS
+    from tqec.compile.detectors.database import DetectorDatabase
     from tqec.utils.exceptions import TQECError
     from tqec.utils.noise_model import NoiseModel
 
     from tools.experiment import annotate
     from tools.experiment.predictors import count_missing_parities, shortest_graphlike_error
+
+    # A fresh in-memory database so a stale on-disk pickle (a version that moved a class) is never
+    # loaded -- otherwise a PR that relocated a pickled class crashes on database load, not on its
+    # actual spatial-Hadamard behaviour.
+    db = DetectorDatabase()
 
     def distance(circuit):
         return shortest_graphlike_error(NoiseModel.uniform_depolarizing(1e-3).noisy_circuit(circuit))
@@ -89,7 +131,7 @@ def probe(label: str, out_json: str) -> None:
             rec: dict = {"arrangement": name, "convention": conv_name, "status": ERROR}
             convention = ALL_CONVENTIONS[conv_name]
             try:
-                circuit = compile_block_graph(graph, convention, observables="auto").generate_stim_circuit(K)
+                circuit = compile_block_graph(graph, convention, observables="auto").generate_stim_circuit(K, detector_database=db)
                 rec["compiled"] = True
                 reannotated = annotate.reannotate(circuit, window=2)
                 rec["missing_parities"] = count_missing_parities(reannotated)
@@ -101,7 +143,7 @@ def probe(label: str, out_json: str) -> None:
                 rec.update(compiled=False, status=NOTIMPL, error=str(exc)[:200])
             except TQECError as exc:
                 try:
-                    circuit = compile_block_graph(graph, convention, observables=[]).generate_stim_circuit(K)
+                    circuit = compile_block_graph(graph, convention, observables=[]).generate_stim_circuit(K, detector_database=db)
                     rec["compiled"] = True
                     rec["missing_parities"] = count_missing_parities(annotate.reannotate(circuit, window=2))
                     rec.update(status=NONDET, error=str(exc)[:200])
