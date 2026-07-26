@@ -192,6 +192,7 @@ class ExperimentReport:
                 f'aria-controls="d{index}" title="show details">&#9656;</button>'
                 f'<span class="gname" title="{html.escape(r.gadget_id)}">{html.escape(r.gadget_id)}</span></td>'
             ),
+            self._links_cell(r, gv),
             f'<td>{html.escape(r.convention)}</td>',
             _num_td(r.k),
             _num_td(r.manhattan_radius),
@@ -209,11 +210,33 @@ class ExperimentReport:
             f'data-gadget="{html.escape(r.gadget_id.lower())}">' + "".join(cells) + "</tr>"
         )
         detail = (
-            f'<tr class="detail" id="d{index}" hidden><td colspan="13">'
+            f'<tr class="detail" id="d{index}" hidden><td colspan="14">'
             + self._detail_html(r, gv)
             + "</td></tr>"
         )
         return main + "\n" + detail
+
+    def _links_cell(self, r: ExperimentRow, gv: dict[str, Any]) -> str:
+        """Always-visible compact hyperlinks so links appear without expanding the row."""
+        v = r.visuals or {}
+        links: list[str] = []
+        if v.get("crumble"):
+            links.append(
+                f'<a class="link" href="{html.escape(v["crumble"])}" target="_blank" '
+                f'rel="noopener" title="open in crumble">crumble</a>'
+            )
+        if v.get("circuit"):
+            links.append(
+                f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" '
+                f'rel="noopener" title="annotated .stim circuit">stim</a>'
+            )
+        if gv.get("block_graph_html"):
+            links.append(
+                f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" '
+                f'rel="noopener" title="3D block graph with Pauli web">3D</a>'
+            )
+        inner = " &middot; ".join(links) if links else "&ndash;"
+        return f'<td class="col-links">{inner}</td>'
 
     def _detail_html(self, r: ExperimentRow, gv: dict[str, Any]) -> str:
         parts: list[str] = []
@@ -320,7 +343,7 @@ td.num, th.num { text-align: right; }
 .col-result, .col-gadget { position: sticky; left: 0; background: var(--bg); z-index: 1; }
 .col-gadget { left: 5.5rem; }
 th.col-result, th.col-gadget { z-index: 3; background: var(--head); }
-.gname { display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.gname { cursor: pointer; display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .badge { font-size: .72rem; padding: .1rem .45rem; border-radius: 999px; color: #fff; }
 .badge.pass { background: var(--pass); } .badge.predictor_fail { background: var(--pfail); }
 .badge.prep_fail { background: var(--prep); } .badge.not_scored { background: var(--skip); } .badge.sim_fail { background: var(--sim); }
@@ -331,7 +354,7 @@ tr.detail td { background: var(--head); white-space: normal; }
 tr.detail .pics { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
 tr.detail figure { margin: .3rem 0; } tr.detail img, tr.detail svg { max-width: 22rem; height: auto; border: 1px solid var(--line); background: #fff; }
 tr.detail figcaption { font-size: .8rem; color: var(--muted); }
-.link { color: var(--accent); }
+.link { color: var(--accent); } .col-links a { margin-right: .4rem; white-space: nowrap; }
 .notes { margin: .2rem 0; }
 #announce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
@@ -365,6 +388,7 @@ tr.detail figcaption { font-size: .8rem; color: var(--muted); }
 <thead><tr>
 <th class="col-result" scope="col" aria-sort="none"><button type="button">Result</button></th>
 <th class="col-gadget" scope="col" aria-sort="none"><button type="button">Gadget</button></th>
+<th class="col-links" scope="col" title="external links">Links</th>
 <th scope="col" aria-sort="none"><button type="button">Convention</button></th>
 <th class="num" scope="col" aria-sort="none"><button type="button">k</button></th>
 <th class="num" scope="col" aria-sort="none" title="Manhattan radius"><button type="button">Radius</button></th>
@@ -400,7 +424,8 @@ function pairs() {
 
 // expand / collapse a row's detail
 tb.addEventListener("click", (e) => {
-  const btn = e.target.closest("button.expand");
+  let btn = e.target.closest("button.expand");
+  if (!btn && e.target.closest(".gname")) btn = e.target.closest("tr").querySelector("button.expand");
   if (!btn) return;
   const detail = document.getElementById(btn.getAttribute("aria-controls"));
   const open = btn.getAttribute("aria-expanded") === "true";
