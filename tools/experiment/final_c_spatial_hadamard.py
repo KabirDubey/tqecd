@@ -1,14 +1,18 @@
 """FINAL C: probe the state of spatial-Hadamard support across tqec versions.
 
-Reruns the six Hadamard-pipe arrangements (spatial ``x`` / ``y`` and temporal ``z``) against
-whatever ``tqec`` is importable, bypassing ``tqec.orchestration``: it compiles each arrangement
-directly per convention, re-annotates with ``tqecd``, and records whether it compiled, its
+Rebuilds the spatial-Hadamard arrangements exactly as tqec's own compile tests do -- the vertical
+and horizontal correlation-surface pipe pairs (``tests/compile/compile_test.py``) -- and runs each
+against whatever ``tqec`` is importable, bypassing ``tqec.orchestration``: it compiles each
+arrangement per convention, re-annotates with ``tqecd``, and records whether it compiled, its
 missing-parity count, and its distance. Run it once per tqec checkout (for example each open
-spatial-Hadamard PR) with that checkout on ``PYTHONPATH``, then aggregate the per-version JSONs
-into one report and heatmap.
+spatial-Hadamard PR) with that checkout on ``PYTHONPATH``, then aggregate the per-version JSONs.
 
     python -m tools.experiment.final_c_spatial_hadamard probe <label> <out.json>
     python -m tools.experiment.final_c_spatial_hadamard aggregate <out_dir> <label=path.json> ...
+
+The tqec test suite encodes the expected state, which this probe reproduces and compares across
+versions: vertical spatial H works only under fixed_boundary; horizontal spatial H works only under
+fixed_bulk and only along the Y direction; everything else raises NotImplementedError.
 """
 
 from __future__ import annotations
@@ -22,7 +26,6 @@ from pathlib import Path
 K = 1
 CONVENTIONS = ("fixed_bulk", "fixed_boundary")
 
-# Status categories, ordered worst -> best for the heatmap colour scale.
 NOTIMPL = "not_implemented"
 ERROR = "error"
 NONDET = "no_det_observable"
@@ -31,15 +34,40 @@ FULL = "full"
 _ORDER = [NOTIMPL, ERROR, NONDET, PARTIAL, FULL]
 
 
-def probe(label: str, out_json: str) -> None:
-    """Compile + re-annotate every Hadamard arrangement under the importable tqec; write JSON.
+def spatial_hadamard_arrangements() -> dict:
+    """The spatial-Hadamard pipe pairs from tqec's own compile tests, keyed by a readable label.
 
-    Every convention the loaded tqec offers is tried (so a version that adds one is covered). The
-    completeness/distance signal comes from ``observables="auto"`` (a logical observable is emitted,
-    so a complete annotation has zero missing parities). If the graph has no deterministic logical
-    observable, the compile is retried detectors-only purely to record whether the spatial-Hadamard
-    template exists at all.
+    Mirrors ``test_compile_spatial_hadamard_vertical_correlation_surface`` and
+    ``..._horizontal_correlation_surface``: a cube of one kind joined by an auto-inferred Hadamard
+    pipe to a cube of the transformed kind, one step along X or Y.
     """
+    from tqec.computation.block_graph import BlockGraph
+    from tqec.utils.position import Direction3D, Position3D
+
+    def pair(before: str, after: str, direction) -> BlockGraph:
+        g = BlockGraph("spatial_hadamard")
+        p0 = Position3D(0, 0, 0)
+        p1 = p0.shift_in_direction(direction, 1)
+        g.add_cube(p0, before)
+        g.add_cube(p1, after)
+        g.add_pipe(p0, p1)
+        return g
+
+    out: dict = {}
+    for dname, direction in (("x", Direction3D.X), ("y", Direction3D.Y)):
+        before = "ZXZ" if dname == "x" else "XZZ"
+        after = "XZX" if dname == "x" else "ZXX"
+        out[f"vertical_{dname}"] = pair(before, after, direction)
+    for obs in ("z", "x"):
+        before = "ZZX" if obs == "z" else "XXZ"
+        after = "XXZ" if obs == "z" else "ZZX"
+        for dname, direction in (("x", Direction3D.X), ("y", Direction3D.Y)):
+            out[f"horizontal_{obs}obs_{dname}"] = pair(before, after, direction)
+    return out
+
+
+def probe(label: str, out_json: str) -> None:
+    """Compile + re-annotate every spatial-Hadamard arrangement under the importable tqec."""
     warnings.filterwarnings("ignore")
     from tqec import compile_block_graph
     from tqec.compile.convention import ALL_CONVENTIONS
@@ -48,36 +76,30 @@ def probe(label: str, out_json: str) -> None:
 
     from tools.experiment import annotate
     from tools.experiment.predictors import count_missing_parities, shortest_graphlike_error
-    from tools.experiment.tests.fixtures import hadamard_arrangements
 
-    def _distance(circuit):
-        noisy = NoiseModel.uniform_depolarizing(1e-3).noisy_circuit(circuit)
-        return shortest_graphlike_error(noisy)
+    def distance(circuit):
+        return shortest_graphlike_error(NoiseModel.uniform_depolarizing(1e-3).noisy_circuit(circuit))
 
-    graphs = hadamard_arrangements()
-    conventions = [c for c in ("fixed_bulk", "fixed_boundary") if c in ALL_CONVENTIONS]
+    arrangements = spatial_hadamard_arrangements()
+    conventions = [c for c in CONVENTIONS if c in ALL_CONVENTIONS]
     conventions += [c for c in ALL_CONVENTIONS if c not in conventions]
     records = []
-    for direction, graph in graphs.items():
+    for name, graph in arrangements.items():
         for conv_name in conventions:
-            rec: dict = {"direction": direction, "convention": conv_name,
-                         "spatial": direction[1] in "xy", "status": ERROR}
+            rec: dict = {"arrangement": name, "convention": conv_name, "status": ERROR}
             convention = ALL_CONVENTIONS[conv_name]
             try:
-                compiled = compile_block_graph(graph, convention, observables="auto")
-                circuit = compiled.generate_stim_circuit(K)
+                circuit = compile_block_graph(graph, convention, observables="auto").generate_stim_circuit(K)
                 rec["compiled"] = True
                 reannotated = annotate.reannotate(circuit, window=2)
                 rec["missing_parities"] = count_missing_parities(reannotated)
-                rec["distance"] = _distance(reannotated)
+                rec["distance"] = distance(reannotated)
                 rec["expected"] = 2 * K + 1
                 full = rec["missing_parities"] == 0 and rec["distance"] == rec["expected"]
                 rec["status"] = FULL if full else PARTIAL
             except NotImplementedError as exc:
                 rec.update(compiled=False, status=NOTIMPL, error=str(exc)[:200])
             except TQECError as exc:
-                # No deterministic logical observable: retry detectors-only just to see whether the
-                # spatial-Hadamard template itself is implemented.
                 try:
                     circuit = compile_block_graph(graph, convention, observables=[]).generate_stim_circuit(K)
                     rec["compiled"] = True
@@ -92,32 +114,32 @@ def probe(label: str, out_json: str) -> None:
             records.append(rec)
 
     Path(out_json).write_text(json.dumps({"label": label, "records": records}, indent=2))
-    n_spatial_full = sum(1 for r in records if r["spatial"] and r["status"] == FULL)
-    print(f"{label}: wrote {out_json}  ({n_spatial_full} spatial-Hadamard cells reached full)")
+    n_full = sum(1 for r in records if r["status"] == FULL)
+    print(f"{label}: wrote {out_json}  ({n_full}/{len(records)} arrangement-cells reached full)")
 
-def aggregate(out_dir: str, mapping: dict[str, str]) -> None:
+
+def aggregate(out_dir: str, mapping: dict) -> None:
     """Combine per-version JSONs into ``final_c_report.html`` + ``final_c_heatmap.png`` + JSON."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     versions = list(mapping)
     data = {label: json.loads(Path(path).read_text())["records"] for label, path in mapping.items()}
-    keys = [(d, c) for d in ("+x", "-x", "+y", "-y", "+z", "-z") for c in CONVENTIONS]
+    keys = sorted({(r["arrangement"], r["convention"]) for recs in data.values() for r in recs})
 
-    def cell(label, direction, convention):
+    def cell(label, arrangement, convention):
         for r in data[label]:
-            if r["direction"] == direction and r["convention"] == convention:
+            if r["arrangement"] == arrangement and r["convention"] == convention:
                 return r
         return {"status": "missing"}
 
     combined = {"versions": versions, "rows": []}
-    for direction, convention in keys:
-        row = {"direction": direction, "convention": convention, "spatial": direction[1] in "xy", "cells": {}}
+    for arrangement, convention in keys:
+        row = {"arrangement": arrangement, "convention": convention, "cells": {}}
         for label in versions:
-            row["cells"][label] = cell(label, direction, convention)
+            row["cells"][label] = cell(label, arrangement, convention)
         combined["rows"].append(row)
     (out / "final_c.json").write_text(json.dumps(combined, indent=2))
-
-    _write_html(out / "final_c_report.html", versions, keys, data, cell)
+    _write_html(out / "final_c_report.html", versions, keys, cell)
     _write_heatmap(out / "final_c_heatmap.png", versions, keys, cell)
     print(f"aggregate: wrote {out}/final_c_report.html, final_c_heatmap.png, final_c.json")
 
@@ -133,36 +155,33 @@ def _detail(rec: dict) -> str:
     if "missing_parities" in rec:
         bits.append(f"missing={rec['missing_parities']}")
     if rec.get("distance") is not None:
-        bits.append(f"d={rec['distance']}/{rec.get('expected','?')}")
+        bits.append(f"d={rec['distance']}/{rec.get('expected', '?')}")
     if rec.get("error"):
-        bits.append(_html.escape(str(rec.get("error_type", "")) + " " + rec["error"])[:80])
+        bits.append(_html.escape((str(rec.get("error_type", "")) + " " + rec["error"]).strip())[:70])
     return " ".join(bits)
 
 
-def _write_html(path, versions, keys, data, cell):
+def _write_html(path, versions, keys, cell):
     head = "".join(f"<th>{_html.escape(v)}</th>" for v in versions)
     rows = []
-    for direction, convention in keys:
+    for arrangement, convention in keys:
         tds = []
         for v in versions:
-            rec = cell(v, direction, convention)
+            rec = cell(v, arrangement, convention)
             st = rec["status"]
-            tds.append(
-                f'<td style="background:{_COLOR.get(st, "#eee")};color:#fff">'
-                f'<b>{_GLYPH.get(st, st)}</b><br><small>{_detail(rec)}</small></td>'
-            )
-        tag = "spatial" if direction[1] in "xy" else "temporal"
-        rows.append(f"<tr><th>{direction} {convention}<br><small>{tag}</small></th>{''.join(tds)}</tr>")
+            tds.append(f'<td style="background:{_COLOR.get(st, "#eee")};color:#fff">'
+                       f'<b>{_GLYPH.get(st, st)}</b><br><small>{_detail(rec)}</small></td>')
+        rows.append(f"<tr><th>{arrangement}<br><small>{convention}</small></th>{''.join(tds)}</tr>")
     path.write_text(
         "<!doctype html><meta charset=utf-8><title>FINAL C: spatial Hadamard state</title>"
         "<style>body{font-family:system-ui,sans-serif;margin:2rem}"
         "table{border-collapse:collapse}th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;vertical-align:top}"
         "small{opacity:.85}</style>"
         "<h1>FINAL C: state of spatial-Hadamard implementation</h1>"
-        "<p>Each Hadamard-pipe arrangement compiled directly (bypassing orchestration) and "
-        "re-annotated with tqecd, per tqec version. Spatial rows (x/y) are the ones the open PRs "
-        "claim to implement; temporal (z) is the baseline that already works.</p>"
-        f"<table><tr><th>arrangement</th>{head}</tr>{''.join(rows)}</table>"
+        "<p>Each spatial-Hadamard arrangement (the vertical and horizontal correlation-surface pipe "
+        "pairs from tqec's own compile tests) compiled directly -- bypassing orchestration -- and "
+        "re-annotated with tqecd, per tqec version.</p>"
+        f"<table><tr><th>arrangement / convention</th>{head}</tr>{''.join(rows)}</table>"
     )
 
 
@@ -176,35 +195,29 @@ def _write_heatmap(path, versions, keys, cell):
         return
     codes = {s: i for i, s in enumerate(_ORDER)}
     grid = np.full((len(keys), len(versions)), np.nan)
-    for r, (direction, convention) in enumerate(keys):
+    for r, (arrangement, convention) in enumerate(keys):
         for c, v in enumerate(versions):
-            grid[r, c] = codes.get(cell(v, direction, convention)["status"], np.nan)
-    fig, ax = plt.subplots(figsize=(1.6 * len(versions) + 3, 0.5 * len(keys) + 2))
+            grid[r, c] = codes.get(cell(v, arrangement, convention)["status"], np.nan)
+    fig, ax = plt.subplots(figsize=(1.7 * len(versions) + 4, 0.55 * len(keys) + 2))
     cmap = matplotlib.colors.ListedColormap(["#8c959f", "#cf222e", "#6e7781", "#9a6700", "#1a7f37"])
     ax.imshow(grid, cmap=cmap, vmin=0, vmax=len(_ORDER) - 1, aspect="auto")
     ax.set_xticks(range(len(versions)), versions, rotation=30, ha="right")
-    ax.set_yticks(range(len(keys)), [f"{d} {c}" for d, c in keys])
-    for r, (direction, convention) in enumerate(keys):
+    ax.set_yticks(range(len(keys)), [f"{a} / {c}" for a, c in keys])
+    for r, (arrangement, convention) in enumerate(keys):
         for c, v in enumerate(versions):
-            ax.text(c, r, _detail(cell(v, direction, convention)), ha="center", va="center",
-                    fontsize=6, color="#fff")
+            ax.text(c, r, _detail(cell(v, arrangement, convention)), ha="center", va="center", fontsize=6, color="#fff")
     ax.set_title("Spatial-Hadamard state (green=full, amber=partial, grey=not implemented, red=error)")
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
 
-def _main(argv: list[str]) -> int:
+def _main(argv):
     if len(argv) >= 3 and argv[0] == "probe":
-        probe(argv[1], argv[2])
-        return 0
+        probe(argv[1], argv[2]); return 0
     if len(argv) >= 2 and argv[0] == "aggregate":
-        out_dir = argv[1]
-        mapping = dict(pair.split("=", 1) for pair in argv[2:])
-        aggregate(out_dir, mapping)
-        return 0
-    print(__doc__)
-    return 2
+        aggregate(argv[1], dict(pair.split("=", 1) for pair in argv[2:])); return 0
+    print(__doc__); return 2
 
 
 if __name__ == "__main__":
