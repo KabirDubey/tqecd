@@ -12,7 +12,13 @@ import json
 
 import pytest
 
-from tools.experiment import ExperimentConfig, reannotate_run, render_report, run_experiment
+from tools.experiment import (
+    ExperimentConfig,
+    reannotate_run,
+    render_report,
+    run_experiment,
+    simulate_run,
+)
 from tools.experiment.tests.fixtures import (
     HADAMARD_DIRECTIONS,
     disjoint_union,
@@ -212,3 +218,26 @@ def test_render_without_report_json(tmp_path):
     empty.mkdir()
     with pytest.raises(FileNotFoundError, match="no report.json"):
         render_report(empty)
+
+
+# every scored row records the wall time of annotation + analysis
+def test_runtime_recorded(out_dir):
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,))
+    report = run_experiment([cnot(Basis.Z)], config, out_dir)
+    scored = _ready(report)
+    assert scored and all(r.runtime_s is not None and r.runtime_s > 0 for r in scored)
+
+
+# simulate_run measures the prepared circuits under a chosen noise model without recompiling
+def test_simulate_run_measures_without_rebuild(out_dir):
+    pytest.importorskip("sinter")
+    pytest.importorskip("pymatching")
+    from tools.experiment.config import SimulationConfig
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,), simulation=SimulationConfig(max_shots=200))
+    run_experiment([cnot(Basis.Z)], config, out_dir)
+    report = simulate_run(out_dir, noise_models=("uniform_depolarizing",), ps=(5e-3, 1e-2),
+                          show_progress=False)
+    assert report.meta.get("simulation", {}).get("results", 0) >= 1
+    assert any(r.ler_plot for r in report.rows)

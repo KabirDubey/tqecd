@@ -9,12 +9,15 @@ Examples::
     python -m tools.experiment --render experiment_out                # rebuild report.html only
     python -m tools.experiment --reannotate experiment_out            # re-score from disk, no recompile
     python -m tools.experiment --reannotate experiment_out --windows 3  # re-score a new tqecd window
+    python -m tools.experiment --simulate experiment_out --noise-models si1000  # LER, no rebuild
 
 ``--gallery all`` runs every gadget in ``tqec.gallery`` in one experiment; ``--gallery <name>``
 runs a single one; ``--list-gallery`` prints the available names. ``--render <run_dir>`` rebuilds
 ``report.html`` from an existing ``report.json`` (UI only--no annotation, no recompile).
 ``--reannotate <run_dir>`` re-annotates and re-scores a run's on-disk circuits with ``tqecd``
 (no recompile); pass ``--windows`` / ``--oracles`` to re-score with different tqecd settings.
+``--simulate <run_dir>`` measures a run's circuits (LER-vs-p plots) under ``--noise-models`` /
+``--ps`` without rebuilding, so two noise models can be compared on identical circuits.
 """
 
 from __future__ import annotations
@@ -107,11 +110,28 @@ def main(argv: list[str] | None = None) -> int:
         metavar="RUN_DIR",
         help="re-annotate and re-score an existing run dir's on-disk circuits with tqecd (no recompile)",
     )
+    source.add_argument(
+        "--simulate",
+        type=Path,
+        metavar="RUN_DIR",
+        help="measure an existing run dir's circuits under a noise model (LER plots), no recompile",
+    )
     parser.add_argument("--k", type=_ints, help="comma-separated ks, e.g. 1,2,3")
     parser.add_argument("--conventions", type=lambda s: tuple(s.split(",")))
     parser.add_argument("--windows", type=_ints)
     parser.add_argument("--manhattan-radii", type=_ints, dest="manhattan_radii")
     parser.add_argument("--oracles", type=lambda s: tuple(s.split(",")))
+    parser.add_argument(
+        "--noise-models",
+        dest="noise_models",
+        type=lambda s: tuple(x for x in s.split(",") if x.strip()),
+        help="comma-separated noise-model names for --simulate, e.g. si1000,uniform_depolarizing",
+    )
+    parser.add_argument(
+        "--ps",
+        type=lambda s: tuple(float(x) for x in s.split(",") if x.strip()),
+        help="comma-separated physical error rates for --simulate, e.g. 1e-3,2e-3,5e-3",
+    )
     parser.add_argument("--out", type=Path, default=Path("experiment_out"))
     args = parser.parse_args(argv)
 
@@ -156,6 +176,13 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
         report = reannotate_run(args.reannotate, overrides=reannotate_overrides)
+        s = report.summary()
+        return 0 if s["predictors_fail"] == 0 else 1
+
+    if args.simulate:
+        from tools.experiment.core import simulate_run
+
+        report = simulate_run(args.simulate, noise_models=args.noise_models, ps=args.ps)
         s = report.summary()
         return 0 if s["predictors_fail"] == 0 else 1
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -270,8 +271,10 @@ def _score_and_render(
             iterator = work
 
     for unit, k, native, radius, window in iterator:
+        started = time.perf_counter()
         reannotated = annotate.reannotate(native, window=window)
         row = _score(native, reannotated, unit, k, radius, window, config, oracles)
+        row.runtime_s = time.perf_counter() - started
         _attach_visuals(row, native, reannotated, config, artifacts, out_dir)
         rows.append(row)
         log.info(
@@ -431,6 +434,94 @@ def render_report(run_dir: str | Path) -> ExperimentReport:
         raise FileNotFoundError(f"render: no report.json found at {report_path}")
     report = ExperimentReport.from_json(report_path)
     report.write(report_path.parent)
+    return report
+
+
+def simulate_run(
+    run_dir: str | Path,
+    *,
+    noise_models: Sequence[str] | None = None,
+    ps: Sequence[float] | None = None,
+    plot: bool = True,
+    lambda_factor: bool = False,
+    show_progress: bool = True,
+) -> ExperimentReport:
+    """Measure an existing run's prepared circuits under a (possibly different) noise model.
+
+    Reads the run's prepared ``mr*/manifest.json`` circuits and its ``report.json``, applies noise
+    with ``tqec.orchestration.simulate_batch`` (one flattened ``sinter.collect``), and attaches
+    LER-vs-p plots (and Lambda factors) to the report--**without recompiling or re-annotating**.
+    This is the standalone re-measure stage: build once, then sample under as many noise models as
+    you like, exactly as a scheduler would (each measures the same circuit files, so a difference
+    is the noise model, not an accident of rebuilding).
+
+    Args:
+        run_dir: a prior run directory (the ``--out`` of an earlier run).
+        noise_models: noise-model factory names to sample under (default: the run's own).
+        ps: physical error rates to sweep (default: the run's own).
+        plot: embed one LER-vs-p figure per gadget into the report.
+        lambda_factor: also compute the Lambda suppression factor from the two largest k.
+        show_progress: print the console summary and the open hint.
+
+    Returns:
+        The report with fresh LER curves (already written back into ``run_dir``).
+    """
+    from dataclasses import replace
+
+    run_dir = Path(run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"simulate: {run_dir} is not a directory")
+    report_path = run_dir / "report.json"
+    if not report_path.is_file():
+        raise FileNotFoundError(f"simulate: no report.json found at {report_path}")
+
+    config = _load_config(run_dir)
+    sim = replace(
+        config.simulation,
+        enabled=True,
+        noise_models=tuple(noise_models) if noise_models else config.simulation.noise_models,
+        ps=tuple(ps) if ps else config.simulation.ps,
+        plot=plot,
+        lambda_factor=lambda_factor,
+    )
+    config = config.with_overrides(simulation=sim)
+
+    manifests = _discover_manifests(run_dir)
+    if not manifests:
+        raise FileNotFoundError(
+            f"simulate: no prepared circuits under {run_dir} (expected mr*/manifest.json). "
+            "This run's circuits were cleaned up; re-run the experiment to regenerate them."
+        )
+    radius, manifest = manifests[-1]
+    # point the manifest's generation config at the requested noise so simulate_batch measures it
+    manifest.config = config.to_batch_config(manhattan_radius=radius)
+
+    report = ExperimentReport.from_json(report_path)
+    # a re-measure replaces any earlier LER curves rather than keeping stale ones
+    for row in report.rows:
+        row.ler_plot = None
+        row.lambda_factor = None
+
+    from tools.experiment import simulate as simulate_mod
+
+    log, log_path = runlog.make_logger(run_dir, name="simulate")
+    log.info(
+        "simulate: run_dir=%s radius=%s noise_models=%s ps=%s",
+        run_dir, radius, sim.noise_models, sim.ps,
+    )
+    simulate_mod.augment(report, manifest, config, radius=radius)
+    report.write(run_dir)
+    log.info("wrote report to %s", run_dir)
+    if show_progress:
+        print(report.to_text(), file=sys.stderr)
+        print(
+            f"simulated under noise_models={list(sim.noise_models)} ps={list(sim.ps)}",
+            file=sys.stderr,
+        )
+        print(
+            f"to see it in your browser run: open {(run_dir / 'report.html').resolve()}",
+            file=sys.stderr,
+        )
     return report
 
 

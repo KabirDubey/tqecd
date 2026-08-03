@@ -66,6 +66,7 @@ class ExperimentRow:
     visuals: dict[str, Any] = field(default_factory=dict)
     ler_plot: str | None = None
     lambda_factor: float | None = None
+    runtime_s: float | None = None
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -181,6 +182,13 @@ class ExperimentReport:
             f"({s['predictor_failed']} predictor failures, {s['prep_failed']} prep failures, "
             f"{s['not_scored']} not scored)"
         )
+        runtimes = [r.runtime_s for r in self.rows if r.runtime_s is not None]
+        if runtimes:
+            footer += (
+                f"\nruntime: {sum(runtimes):.2f}s total, "
+                f"{sum(runtimes) / len(runtimes):.3f}s mean over {len(runtimes)} scored rows "
+                "(annotation + analysis)"
+            )
         return "\n".join(lines) + footer
 
     def to_html(self) -> str:
@@ -224,6 +232,7 @@ class ExperimentReport:
             _num_td(r.expected_distance, optional=True, col="expected"),
             _num_td(r.native_missing, optional=True, col="native"),
             _num_td(r.lambda_factor, optional=True, col="lambda"),
+            _num_td(r.runtime_s, optional=True, col="runtime"),
             f'<td class="opt" data-col="source">{html.escape(r.source)}</td>',
             f'<td class="opt" data-col="status">{html.escape(r.status)}</td>',
         ]
@@ -232,7 +241,7 @@ class ExperimentReport:
             f'data-gadget="{html.escape(r.gadget_id.lower())}">' + "".join(cells) + "</tr>"
         )
         detail = (
-            f'<tr class="detail" id="d{index}" hidden><td colspan="14">'
+            f'<tr class="detail" id="d{index}" hidden><td colspan="15">'
             + self._detail_html(r, gv)
             + "</td></tr>"
         )
@@ -397,6 +406,7 @@ tr.detail figcaption { font-size: .8rem; color: var(--muted); }
       <label><input type="checkbox" data-col="expected"/> Expected distance</label>
       <label><input type="checkbox" data-col="native"/> Native missing</label>
       <label><input type="checkbox" data-col="lambda"/> Lambda</label>
+      <label><input type="checkbox" data-col="runtime"/> Runtime (s)</label>
       <label><input type="checkbox" data-col="source"/> Source</label>
       <label><input type="checkbox" data-col="status"/> Status</label>
     </div>
@@ -420,6 +430,7 @@ tr.detail figcaption { font-size: .8rem; color: var(--muted); }
 <th class="num opt" data-col="expected" scope="col" aria-sort="none"><button type="button">Expected</button></th>
 <th class="num opt" data-col="native" scope="col" aria-sort="none" title="native annotation missing parities"><button type="button">Native missing</button></th>
 <th class="num opt" data-col="lambda" scope="col" aria-sort="none"><button type="button">Lambda</button></th>
+<th class="num opt" data-col="runtime" scope="col" aria-sort="none" title="annotation + analysis wall time"><button type="button">Runtime (s)</button></th>
 <th class="opt" data-col="source" scope="col" aria-sort="none"><button type="button">Source</button></th>
 <th class="opt" data-col="status" scope="col" aria-sort="none"><button type="button">Status</button></th>
 </tr></thead>

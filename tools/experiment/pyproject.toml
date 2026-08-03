@@ -27,6 +27,8 @@ analysis = ["polars>=1.0", "orjson>=3.10", "msgspec>=0.18"]
 report = ["matplotlib>=3.9", "tqdm>=4.66"]
 # Gold-standard LER / Lambda simulation (sinter comes in via tqec).
 simulation = ["sinter>=1.14", "matplotlib>=3.9"]
+# Live, interactive documentation of the workflow (notebooks/workflow.py).
+notebook = ["marimo>=0.9"]
 dev = ["pytest>=8.0"]
 
 # The experiment tool consumes the batch interface from a local tqec checkout on the branch that
