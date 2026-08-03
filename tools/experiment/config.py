@@ -35,6 +35,18 @@ class SimulationConfig:
                 kwargs[name] = tuple(kwargs[name])
         return cls(**kwargs)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "noise_models": list(self.noise_models),
+            "ps": list(self.ps),
+            "max_shots": self.max_shots,
+            "max_errors": self.max_errors,
+            "decoders": list(self.decoders),
+            "plot": self.plot,
+            "lambda_factor": self.lambda_factor,
+        }
+
 
 @dataclass(frozen=True)
 class ExperimentConfig:
@@ -91,6 +103,23 @@ class ExperimentConfig:
             circuit_mode=self.circuit_mode,
             logical_observables=self.logical_observables,
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """A round-trippable dict (``from_dict(to_dict()) == self``), persisted for ``render``."""
+        return {
+            "conventions": list(self.conventions),
+            "ks": list(self.ks),
+            "windows": list(self.windows),
+            "manhattan_radii": list(self.manhattan_radii),
+            "logical_observables": self.logical_observables,
+            "predictors": list(self.predictors),
+            "oracles": list(self.oracles),
+            "noise_models": list(self.noise_models),
+            "ps": list(self.ps),
+            "expected_distance": self.expected_distance,
+            "circuit_mode": self.circuit_mode,
+            "simulation": self.simulation.to_dict(),
+        }
 
     # construction
     @classmethod

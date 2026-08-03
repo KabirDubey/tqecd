@@ -6,9 +6,15 @@ Examples::
     python -m tools.experiment --gallery all --k 1,2
     python -m tools.experiment --config tools/experiment/configs/manhattan_sensitivity.toml
     python -m tools.experiment --input my_gadget.dae --k 1,2,3
+    python -m tools.experiment --render experiment_out                # rebuild report.html only
+    python -m tools.experiment --reannotate experiment_out            # re-score from disk, no recompile
+    python -m tools.experiment --reannotate experiment_out --windows 3  # re-score a new tqecd window
 
 ``--gallery all`` runs every gadget in ``tqec.gallery`` in one experiment; ``--gallery <name>``
-runs a single one; ``--list-gallery`` prints the available names.
+runs a single one; ``--list-gallery`` prints the available names. ``--render <run_dir>`` rebuilds
+``report.html`` from an existing ``report.json`` (UI only--no annotation, no recompile).
+``--reannotate <run_dir>`` re-annotates and re-scores a run's on-disk circuits with ``tqecd``
+(no recompile); pass ``--windows`` / ``--oracles`` to re-score with different tqecd settings.
 """
 
 from __future__ import annotations
@@ -89,6 +95,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print the available gallery gadget names and exit",
     )
+    source.add_argument(
+        "--render",
+        type=Path,
+        metavar="RUN_DIR",
+        help="rebuild report.html from an existing run dir's report.json (UI only, no annotation)",
+    )
+    source.add_argument(
+        "--reannotate",
+        type=Path,
+        metavar="RUN_DIR",
+        help="re-annotate and re-score an existing run dir's on-disk circuits with tqecd (no recompile)",
+    )
     parser.add_argument("--k", type=_ints, help="comma-separated ks, e.g. 1,2,3")
     parser.add_argument("--conventions", type=lambda s: tuple(s.split(",")))
     parser.add_argument("--windows", type=_ints)
@@ -101,6 +119,45 @@ def main(argv: list[str] | None = None) -> int:
         print("gallery gadgets:", ", ".join(sorted(_gallery_builders())))
         print("'all' runs every canonical gadget:", ", ".join(_GALLERY_ALL))
         return 0
+
+    if args.render:
+        from tools.experiment.core import render_report
+
+        report = render_report(args.render)
+        print(report.to_text(), file=sys.stderr)
+        run_dir = Path(args.render)
+        html_path = (run_dir if run_dir.is_dir() else run_dir.parent) / "report.html"
+        print("re-rendered report.html from report.json", file=sys.stderr)
+        print(f"to see it in your browser run: open {html_path.resolve()}", file=sys.stderr)
+        s = report.summary()
+        return 0 if s["predictors_fail"] == 0 else 1
+
+    if args.reannotate:
+        from tools.experiment.core import reannotate_run
+
+        reannotate_overrides: dict[str, Any] = {}
+        if args.windows:
+            reannotate_overrides["windows"] = args.windows
+        if args.oracles:
+            reannotate_overrides["oracles"] = args.oracles
+        baked = [
+            flag
+            for flag, value in (
+                ("--k", args.k),
+                ("--conventions", args.conventions),
+                ("--manhattan-radii", args.manhattan_radii),
+            )
+            if value
+        ]
+        if baked:
+            print(
+                f"--reannotate ignores {', '.join(baked)}: those are baked into the prepared "
+                "circuits on disk. Re-run without --reannotate to change them.",
+                file=sys.stderr,
+            )
+        report = reannotate_run(args.reannotate, overrides=reannotate_overrides)
+        s = report.summary()
+        return 0 if s["predictors_fail"] == 0 else 1
 
     config = ExperimentConfig.from_toml(args.config) if args.config else ExperimentConfig()
 

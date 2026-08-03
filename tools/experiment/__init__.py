@@ -7,7 +7,7 @@ optional gold-standard LER/Lambda mode).
 """
 
 from tools.experiment.config import ExperimentConfig, SimulationConfig
-from tools.experiment.core import run_experiment
+from tools.experiment.core import reannotate_run, render_report, run_experiment
 from tools.experiment.report import ExperimentReport, ExperimentRow
 
 __all__ = [
@@ -15,5 +15,7 @@ __all__ = [
     "SimulationConfig",
     "ExperimentReport",
     "ExperimentRow",
+    "reannotate_run",
+    "render_report",
     "run_experiment",
 ]

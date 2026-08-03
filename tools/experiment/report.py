@@ -71,6 +71,11 @@ class ExperimentRow:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ExperimentRow":
+        known = set(cls.__dataclass_fields__)
+        return cls(**{k: v for k, v in data.items() if k in known})
+
 
 @dataclass
 class ExperimentReport:
@@ -104,6 +109,23 @@ class ExperimentReport:
             "gadget_visuals": self.gadget_visuals,
             "rows": [r.to_dict() for r in self.rows],
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ExperimentReport":
+        """Reconstruct a report from a serialized ``report.json`` payload (round-trips ``to_dict``)."""
+        return cls(
+            rows=[ExperimentRow.from_dict(r) for r in data.get("rows", [])],
+            meta=data.get("meta", {}),
+            gadget_visuals=data.get("gadget_visuals", {}),
+        )
+
+    @classmethod
+    def from_json(cls, path: str | Path) -> "ExperimentReport":
+        """Load a report from a ``report.json`` file or the run directory that contains it."""
+        path = Path(path)
+        if path.is_dir():
+            path = path / "report.json"
+        return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
     def write(self, out_dir: str | Path) -> Path:
         out = Path(out_dir)

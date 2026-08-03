@@ -78,6 +78,48 @@ Run from the command line:
     # list the available gallery gadgets
     python -m tools.experiment --list-gallery
 
+    # rebuild report.html from an existing report.json (UI only)
+    python -m tools.experiment --render out
+
+    # re-annotate and re-score a run's on-disk circuits with tqecd (no recompile)
+    python -m tools.experiment --reannotate out
+
+Re-using a run without recompiling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every run persists its full config to ``<out>/config.json``, its prepared noiseless circuits under
+``<out>/mr<radius>/``, and the authoritative ``<out>/report.json``. Two flags reuse that on-disk
+data at very different cost:
+
+``--render <out>`` rebuilds ``report.html`` (and ``report.txt`` / ``report.csv``) from the existing
+``report.json`` -- **UI only**. No circuits are read, no annotation runs, and no scores change; it
+runs no ``tqec`` or ``tqecd`` code. Use it to refresh the HTML after the report/visuals code
+changed. It needs nothing but ``report.json`` (the embedded pictures render regardless; the file
+links resolve when the artifacts are still on disk).
+
+.. code-block:: bash
+
+    python -m tools.experiment --render out
+
+``--reannotate <out>`` reads the prepared ``mr<radius>/`` circuits back, re-annotates them with
+``tqecd``, re-scores, and rewrites the whole report with fresh visuals -- **without recompiling any
+circuit**. Use it to re-score at a different ``tqecd`` matching window, or against a different
+``tqecd`` on the ``PYTHONPATH``, in a second or two rather than a full run:
+
+.. code-block:: bash
+
+    # same settings, re-annotated with the current tqecd
+    python -m tools.experiment --reannotate out
+
+    # re-score every prepared circuit at a different tqecd window
+    python -m tools.experiment --reannotate out --windows 3
+
+For ``--reannotate``, ``--windows`` and ``--oracles`` are re-applied; ``--k`` / ``--conventions`` /
+``--manhattan-radii`` are baked into the prepared circuits and are ignored with a notice (re-run the
+experiment to change them). ``--reannotate`` needs the ``mr<radius>/`` circuits on disk -- if a run
+was cleaned down to just ``report.*``, ``--render`` still rebuilds the UI, but re-scoring needs a
+full re-run.
+
 .. dropdown:: Minimal example (click to expand)
 
     The smallest useful run: one gadget, default predictors, two code distances.

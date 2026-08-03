@@ -8,9 +8,11 @@ spatial Hadamard on ``fixed_bulk``) are recorded as non-ready and excluded, not 
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from tools.experiment import ExperimentConfig, run_experiment
+from tools.experiment import ExperimentConfig, reannotate_run, render_report, run_experiment
 from tools.experiment.tests.fixtures import (
     HADAMARD_DIRECTIONS,
     disjoint_union,
@@ -143,3 +145,70 @@ def test_manhattan_radius_sweep(out_dir):
         assert row.distance is not None
     # reannotated annotation is complete at every radius (tqecd uses `window`, not manhattan_radius)
     _assert_all_ready_pass(report)
+
+
+# reannotate_run re-scores a run from its on-disk circuits without recompiling
+def test_reannotate_reuses_prepared_circuits(out_dir):
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,))
+    original = run_experiment([cnot(Basis.Z)], config, out_dir)
+    # the full config is persisted so a later reannotate can recover it
+    assert (out_dir / "config.json").is_file()
+    assert ExperimentConfig.from_dict(
+        json.loads((out_dir / "config.json").read_text())
+    ) == config
+
+    # leave mr2 intact and just re-annotate off disk. No prepare_batch is called.
+    rescored = reannotate_run(out_dir)
+    assert [(r.gadget_id, r.convention, r.k, r.window) for r in _ready(rescored)] == [
+        (r.gadget_id, r.convention, r.k, r.window) for r in _ready(original)
+    ]
+    _assert_all_ready_pass(rescored)
+
+
+# reannotate can re-score with a different tqecd window without recompiling
+def test_reannotate_window_override(out_dir):
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,))
+    run_experiment([cnot(Basis.Z)], config, out_dir)
+    rescored = reannotate_run(out_dir, overrides={"windows": (3,)})
+    ready = _ready(rescored)
+    assert ready and {r.window for r in ready} == {3}
+    _assert_all_ready_pass(rescored)
+
+
+# reannotate on a directory with no prepared circuits fails clearly rather than silently emptily
+def test_reannotate_without_prepared_circuits(tmp_path):
+    empty = tmp_path / "cleaned_run"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError, match="no prepared circuits"):
+        reannotate_run(empty)
+
+
+# render rebuilds report.html from report.json alone--no circuits, no annotation, no re-score
+def test_render_rebuilds_ui_from_report_json(out_dir):
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,))
+    original = run_experiment([cnot(Basis.Z)], config, out_dir)
+
+    # remove everything except report.json: the prepared circuits, the HTML, the config.
+    import shutil
+    shutil.rmtree(out_dir / "mr2")
+    (out_dir / "report.html").unlink()
+    (out_dir / "config.json").unlink()
+
+    rebuilt = render_report(out_dir)
+    # the report is reconstructed identically from report.json...
+    assert [r.to_dict() for r in rebuilt.rows] == [r.to_dict() for r in original.rows]
+    assert rebuilt.gadget_visuals == original.gadget_visuals
+    # ...and report.html is regenerated with its embedded pictures and links.
+    html_text = (out_dir / "report.html").read_text()
+    assert "col-links" in html_text and "data:image/png" in html_text
+
+
+# render fails clearly when there is no report.json to rebuild from
+def test_render_without_report_json(tmp_path):
+    empty = tmp_path / "no_report"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError, match="no report.json"):
+        render_report(empty)

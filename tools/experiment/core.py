@@ -9,6 +9,7 @@ links, stim diagrams, structure pictures), logs progress, and prints a console s
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -190,50 +191,64 @@ def _attach_visuals(
     row.visuals = v
 
 
-def run_experiment(
-    inputs: Sequence[str | Path | Any],
+def _write_config(config: ExperimentConfig, out_dir: Path) -> None:
+    """Persist the full config so ``render_report`` can re-render this run from disk later."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "config.json").write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
+
+
+def _load_config(run_dir: Path) -> ExperimentConfig:
+    """Recover a previous run's config: ``config.json`` first, then the ``report.json`` meta."""
+    cfg_path = run_dir / "config.json"
+    if cfg_path.is_file():
+        return ExperimentConfig.from_dict(json.loads(cfg_path.read_text()))
+    report_path = run_dir / "report.json"
+    if report_path.is_file():
+        meta = json.loads(report_path.read_text()).get("meta", {})
+        return ExperimentConfig.from_dict(meta)
+    return ExperimentConfig()
+
+
+def _discover_manifests(run_dir: Path) -> list[tuple[int, Any]]:
+    """Load every prepared ``mr*/manifest.json`` under ``run_dir``, sorted by manhattan radius."""
+    from tqec.orchestration import BatchManifest
+
+    found: list[tuple[int, Any]] = []
+    for mdir in sorted(run_dir.glob("mr*")):
+        manifest_path = mdir / "manifest.json"
+        if manifest_path.is_file():
+            manifest = BatchManifest.read(manifest_path)
+            found.append((manifest.config.manhattan_radius, manifest))
+    found.sort(key=lambda rm: rm[0])
+    return found
+
+
+def _score_and_render(
+    manifests: Sequence[tuple[int, Any]],
     config: ExperimentConfig,
-    out_dir: str | Path,
+    out_dir: Path,
     *,
-    oracles: Sequence[Any] = (),
-    show_progress: bool = True,
+    oracles: Sequence[Any],
+    show_progress: bool,
+    log: Any,
+    log_path: Path,
 ) -> ExperimentReport:
-    """Run a batched gadget experiment and write ``report.{json,html,txt,csv}`` under ``out_dir``.
+    """Score already-prepared manifests, attach visuals, and write the report.
 
-    Args:
-        inputs: a mix of ``.dae`` / ``.bgraph`` paths and in-memory ``BlockGraph`` objects, passed
-            straight to ``tqec.orchestration.prepare_batch``.
-        config: experiment knobs (conventions, ks, windows, manhattan radii, predictors, oracles).
-        out_dir: directory for the run artifacts and the report.
-        oracles: optional user-supplied reference oracles (objects), compared up to logical
-            symmetry; merged with any registered by name in ``config.oracles``. Ground truth is
-            opt-in and often absent, so this defaults to empty.
-        show_progress: draw a per-row progress bar and print a console summary at the end.
-
-    Returns:
-        The :class:`ExperimentReport` (already written to disk).
+    Shared by :func:`run_experiment` (which prepares the manifests first) and
+    :func:`render_report` (which loads them off disk). This never calls ``prepare_batch``, so no
+    circuits are recompiled here--only re-annotated with ``tqecd``, scored, and rendered.
     """
-    from tqec.orchestration import prepare_batch
-
-    out_dir = Path(out_dir)
     artifacts = out_dir / "artifacts"
-    log, log_path = runlog.make_logger(out_dir)
-    log.info(
-        "start: conventions=%s ks=%s windows=%s manhattan_radii=%s inputs=%d",
-        config.conventions, config.ks, config.windows, config.manhattan_radii, len(inputs),
-    )
-
-    active_oracles = [*oracles, *config.enabled_oracles()]
     gadget_visuals: dict[str, dict[str, Any]] = {}
     rows: list[ExperimentRow] = []
     work: list[tuple[Any, int, stim.Circuit, int, int]] = []
     last_manifest = None
+    radii: list[int] = []
 
-    for radius in config.manhattan_radii:
-        batch_config = config.to_batch_config(manhattan_radius=radius)
-        log.info("prepare_batch: manhattan_radius=%d", radius)
-        manifest = prepare_batch(inputs, batch_config, out_dir / f"mr{radius}")
+    for radius, manifest in manifests:
         last_manifest = manifest
+        radii.append(radius)
         for unit in manifest.units:
             _ensure_gadget_visuals(unit, manifest, gadget_visuals, artifacts, out_dir, log)
             if unit.status != "ready" or not unit.circuits:
@@ -256,7 +271,7 @@ def run_experiment(
 
     for unit, k, native, radius, window in iterator:
         reannotated = annotate.reannotate(native, window=window)
-        row = _score(native, reannotated, unit, k, radius, window, config, active_oracles)
+        row = _score(native, reannotated, unit, k, radius, window, config, oracles)
         _attach_visuals(row, native, reannotated, config, artifacts, out_dir)
         rows.append(row)
         log.info(
@@ -272,8 +287,8 @@ def run_experiment(
             "conventions": list(config.conventions),
             "ks": list(config.ks),
             "windows": list(config.windows),
-            "manhattan_radii": list(config.manhattan_radii),
-            "oracles": [getattr(o, "name", str(o)) for o in active_oracles],
+            "manhattan_radii": radii,
+            "oracles": [getattr(o, "name", str(o)) for o in oracles],
             "log": _relpath(log_path, out_dir),
         },
     )
@@ -281,13 +296,141 @@ def run_experiment(
     if config.simulation.enabled and last_manifest is not None:
         from tools.experiment import simulate
 
-        last_radius = config.manhattan_radii[-1]
-        simulate.augment(report, last_manifest, config, radius=last_radius)
+        simulate.augment(report, last_manifest, config, radius=radii[-1] if radii else None)
 
     report.write(out_dir)
     log.info("wrote report to %s", out_dir)
     if show_progress:
         _print_console_summary(report, out_dir, log_path)
+    return report
+
+
+def run_experiment(
+    inputs: Sequence[str | Path | Any],
+    config: ExperimentConfig,
+    out_dir: str | Path,
+    *,
+    oracles: Sequence[Any] = (),
+    show_progress: bool = True,
+) -> ExperimentReport:
+    """Run a batched gadget experiment and write ``report.{json,html,txt,csv}`` under ``out_dir``.
+
+    Args:
+        inputs: a mix of ``.dae`` / ``.bgraph`` paths and in-memory ``BlockGraph`` objects, passed
+            straight to ``tqec.orchestration.prepare_batch``.
+        config: experiment knobs (conventions, ks, windows, manhattan radii, predictors, oracles).
+        out_dir: directory for the run artifacts and the report.
+        oracles: optional user-supplied reference oracles (objects), compared up to logical
+            symmetry; merged with any registered by name in ``config.oracles``. Ground truth is
+            opt-in and often absent, so this defaults to empty.
+        show_progress: draw a per-row progress bar and print a console summary at the end.
+
+    Returns:
+        The :class:`ExperimentReport` (already written to disk). The full config is also written to
+        ``out_dir/config.json`` so :func:`render_report` can re-render the run from disk.
+    """
+    from tqec.orchestration import prepare_batch
+
+    out_dir = Path(out_dir)
+    log, log_path = runlog.make_logger(out_dir)
+    log.info(
+        "start: conventions=%s ks=%s windows=%s manhattan_radii=%s inputs=%d",
+        config.conventions, config.ks, config.windows, config.manhattan_radii, len(inputs),
+    )
+    _write_config(config, out_dir)
+
+    active_oracles = [*oracles, *config.enabled_oracles()]
+    manifests: list[tuple[int, Any]] = []
+    for radius in config.manhattan_radii:
+        batch_config = config.to_batch_config(manhattan_radius=radius)
+        log.info("prepare_batch: manhattan_radius=%d", radius)
+        manifests.append((radius, prepare_batch(inputs, batch_config, out_dir / f"mr{radius}")))
+
+    return _score_and_render(
+        manifests, config, out_dir,
+        oracles=active_oracles, show_progress=show_progress, log=log, log_path=log_path,
+    )
+
+
+def reannotate_run(
+    run_dir: str | Path,
+    *,
+    overrides: dict[str, Any] | None = None,
+    oracles: Sequence[Any] = (),
+    show_progress: bool = True,
+) -> ExperimentReport:
+    """Re-annotate and re-score a run from its on-disk circuits--no recompile.
+
+    ``run_dir`` is an experiment output directory that still holds its ``mr*/manifest.json`` and
+    the circuits and graphs they reference. The native circuits are read off disk, re-annotated
+    with ``tqecd``, scored, and written back out with fresh visuals and a fresh report. Use it to
+    re-score with a different ``tqecd`` matching window / ``oracles`` / predictor selection, or
+    against a different ``tqecd`` on the ``PYTHONPATH``, without paying for a recompile. To rebuild
+    only the ``report.html`` UI from an existing ``report.json`` (no annotation), use
+    :func:`render_report`.
+
+    Args:
+        run_dir: a prior run directory (the ``--out`` of an earlier run).
+        overrides: config fields to override before re-scoring. Only knobs that do not require
+            recompilation take effect (``windows``, ``predictors``, ``oracles``, ``noise_models``,
+            ``ps``, ``expected_distance``, ``simulation``); ``ks`` / ``conventions`` /
+            ``manhattan_radii`` / ``logical_observables`` are baked into the prepared circuits and
+            are read back from the manifests on disk.
+        oracles: extra reference oracles, as in :func:`run_experiment`.
+        show_progress: draw the progress bar and print the console summary.
+
+    Returns:
+        The re-scored :class:`ExperimentReport` (already written back into ``run_dir``).
+    """
+    run_dir = Path(run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"reannotate: {run_dir} is not a directory")
+
+    config = _load_config(run_dir)
+    if overrides:
+        config = config.with_overrides(**overrides)
+
+    manifests = _discover_manifests(run_dir)
+    if not manifests:
+        raise FileNotFoundError(
+            f"reannotate: no prepared circuits under {run_dir} (expected mr*/manifest.json). "
+            "This run's circuits were cleaned up; re-run the experiment to regenerate them."
+        )
+
+    log, log_path = runlog.make_logger(run_dir, name="reannotate")
+    log.info(
+        "reannotate: run_dir=%s radii=%s windows=%s predictors=%s",
+        run_dir, [r for r, _ in manifests], config.windows, config.predictors,
+    )
+    active_oracles = [*oracles, *config.enabled_oracles()]
+    return _score_and_render(
+        manifests, config, run_dir,
+        oracles=active_oracles, show_progress=show_progress, log=log, log_path=log_path,
+    )
+
+
+def render_report(run_dir: str | Path) -> ExperimentReport:
+    """Rebuild ``report.html`` (and ``report.txt`` / ``report.csv``) from an existing report--UI only.
+
+    This reads the run's ``report.json`` and re-renders it through the current report UI. No
+    circuits are read, no annotation runs, and no scores change: it is a pure view rebuild for
+    refreshing the HTML after the report/visuals code changed. It runs no ``tqec`` or ``tqecd``
+    code and needs nothing but ``report.json`` (the artifacts it links to should still be on disk
+    for the file links to resolve, but the embedded pictures render regardless). To re-annotate
+    and re-score from prepared circuits instead, use :func:`reannotate_run`.
+
+    Args:
+        run_dir: a prior run directory, or the path to its ``report.json`` directly.
+
+    Returns:
+        The rebuilt :class:`ExperimentReport` (already written back next to ``report.json``).
+    """
+    path = Path(run_dir)
+    report_path = path / "report.json" if path.is_dir() else path
+    if not report_path.is_file():
+        raise FileNotFoundError(f"render: no report.json found at {report_path}")
+    report = ExperimentReport.from_json(report_path)
+    report.write(report_path.parent)
     return report
 
 
