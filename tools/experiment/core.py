@@ -13,8 +13,9 @@ import json
 import os
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import stim
 
@@ -31,7 +32,7 @@ from tools.experiment.report import (
 
 
 def _expected_distance(expr: str, k: int) -> int:
-    return int(eval(expr, {"__builtins__": {}}, {"k": k}))  # noqa: S307 - trusted config expr
+    return int(eval(expr, {"__builtins__": {}}, {"k": k}))
 
 
 def _noisy(circuit: stim.Circuit, noise_model: str, p: float) -> stim.Circuit:
@@ -126,7 +127,7 @@ def _ensure_gadget_visuals(
     out_dir: Path,
     log,
 ) -> None:
-    """Compute the per-gadget structure pictures once (positioned ZX + block-graph Pauli web)."""
+    """Compute the per-gadget structure pictures once (positioned ZX + block-graph observable surface)."""
     gid = unit.gadget_id
     if gid in gadget_visuals or not getattr(unit, "graph", None):
         return
@@ -147,7 +148,9 @@ def _ensure_gadget_visuals(
     except Exception:
         n_nodes = 0
     if n_nodes > visuals.ZX_INLINE_MAX_NODES:
-        written_zx = visuals.write_positioned_zx_png(graph, artifacts / gid / "positioned_zx.png", title=gid)
+        written_zx = visuals.write_positioned_zx_png(
+            graph, artifacts / gid / "positioned_zx.png", title=gid
+        )
         if written_zx:
             gadget_visuals[gid]["zx_link"] = _relpath(written_zx, out_dir)
     else:
@@ -157,7 +160,9 @@ def _ensure_gadget_visuals(
     # The 3D block-graph viewer is written for every gadget (including pipeless single-cube ones),
     # so the report's 3D link is never missing.
     bg_path = artifacts / gid / "block_graph.html"
-    written = visuals.write_block_graph_html(graph, bg_path, correlation_surface=surface)
+    written = visuals.write_block_graph_html(
+        graph, bg_path, correlation_surface=surface
+    )
     if written:
         gadget_visuals[gid]["block_graph_html"] = _relpath(written, out_dir)
 
@@ -174,11 +179,17 @@ def _attach_visuals(
     Stim's embedded circuit diagrams are no longer produced; the circuit is inspected through the
     crumble link and the written ``.stim`` files instead.
     """
-    cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}_r{row.manhattan_radius}_w{row.window}"
+    cell = (
+        artifacts
+        / row.gadget_id
+        / f"{row.convention}_k{row.k}_r{row.manhattan_radius}_w{row.window}"
+    )
     v: dict[str, Any] = {}
     try:
         v["crumble"] = visuals.crumble_url(reannotated)
-        v["circuit"] = _relpath(visuals.write_circuit(reannotated, cell / "annotated.stim"), out_dir)
+        v["circuit"] = _relpath(
+            visuals.write_circuit(reannotated, cell / "annotated.stim"), out_dir
+        )
         detector_free = annotate.strip_annotations(native)
         v["detector_free"] = _relpath(
             visuals.write_circuit(detector_free, cell / "detector_free.stim"), out_dir
@@ -191,7 +202,9 @@ def _attach_visuals(
 def _write_config(config: ExperimentConfig, out_dir: Path) -> None:
     """Persist the full config so ``render_report`` can re-render this run from disk later."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "config.json").write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
+    (out_dir / "config.json").write_text(
+        json.dumps(config.to_dict(), indent=2), encoding="utf-8"
+    )
 
 
 def _load_config(run_dir: Path) -> ExperimentConfig:
@@ -247,10 +260,17 @@ def _score_and_render(
         last_manifest = manifest
         radii.append(radius)
         for unit in manifest.units:
-            _ensure_gadget_visuals(unit, manifest, gadget_visuals, artifacts, out_dir, log)
+            _ensure_gadget_visuals(
+                unit, manifest, gadget_visuals, artifacts, out_dir, log
+            )
             if unit.status != "ready" or not unit.circuits:
                 rows.append(_prep_row(unit, radius))
-                log.info("prep %s [%s] status=%s", unit.gadget_id, unit.convention, unit.status)
+                log.info(
+                    "prep %s [%s] status=%s",
+                    unit.gadget_id,
+                    unit.convention,
+                    unit.status,
+                )
                 continue
             for k, rel in unit.circuits.items():
                 native = stim.Circuit.from_file(manifest.run_dir / rel)
@@ -275,8 +295,14 @@ def _score_and_render(
         rows.append(row)
         log.info(
             "score %s [%s] k=%s r=%s w=%s missing=%s dist=%s pass=%s",
-            unit.gadget_id, unit.convention, k, radius, window,
-            row.missing_parities, row.distance, row.predictors_pass,
+            unit.gadget_id,
+            unit.convention,
+            k,
+            radius,
+            window,
+            row.missing_parities,
+            row.distance,
+            row.predictors_pass,
         )
 
     report = ExperimentReport(
@@ -295,7 +321,9 @@ def _score_and_render(
     if config.simulation.enabled and last_manifest is not None:
         from tools.experiment import simulate
 
-        simulate.augment(report, last_manifest, config, radius=radii[-1] if radii else None)
+        simulate.augment(
+            report, last_manifest, config, radius=radii[-1] if radii else None
+        )
 
     report.write(out_dir)
     log.info("wrote report to %s", out_dir)
@@ -334,7 +362,11 @@ def run_experiment(
     log, log_path = runlog.make_logger(out_dir)
     log.info(
         "start: conventions=%s ks=%s windows=%s manhattan_radii=%s inputs=%d",
-        config.conventions, config.ks, config.windows, config.manhattan_radii, len(inputs),
+        config.conventions,
+        config.ks,
+        config.windows,
+        config.manhattan_radii,
+        len(inputs),
     )
     _write_config(config, out_dir)
 
@@ -343,11 +375,18 @@ def run_experiment(
     for radius in config.manhattan_radii:
         batch_config = config.to_batch_config(manhattan_radius=radius)
         log.info("prepare_batch: manhattan_radius=%d", radius)
-        manifests.append((radius, prepare_batch(inputs, batch_config, out_dir / f"mr{radius}")))
+        manifests.append(
+            (radius, prepare_batch(inputs, batch_config, out_dir / f"mr{radius}"))
+        )
 
     return _score_and_render(
-        manifests, config, out_dir,
-        oracles=active_oracles, show_progress=show_progress, log=log, log_path=log_path,
+        manifests,
+        config,
+        out_dir,
+        oracles=active_oracles,
+        show_progress=show_progress,
+        log=log,
+        log_path=log_path,
     )
 
 
@@ -399,12 +438,20 @@ def reannotate_run(
     log, log_path = runlog.make_logger(run_dir, name="reannotate")
     log.info(
         "reannotate: run_dir=%s radii=%s windows=%s predictors=%s",
-        run_dir, [r for r, _ in manifests], config.windows, config.predictors,
+        run_dir,
+        [r for r, _ in manifests],
+        config.windows,
+        config.predictors,
     )
     active_oracles = [*oracles, *config.enabled_oracles()]
     return _score_and_render(
-        manifests, config, run_dir,
-        oracles=active_oracles, show_progress=show_progress, log=log, log_path=log_path,
+        manifests,
+        config,
+        run_dir,
+        oracles=active_oracles,
+        show_progress=show_progress,
+        log=log,
+        log_path=log_path,
     )
 
 
@@ -475,7 +522,9 @@ def simulate_run(
     sim = replace(
         config.simulation,
         enabled=True,
-        noise_models=tuple(noise_models) if noise_models else config.simulation.noise_models,
+        noise_models=tuple(noise_models)
+        if noise_models
+        else config.simulation.noise_models,
         ps=tuple(ps) if ps else config.simulation.ps,
         plot=plot,
         lambda_factor=lambda_factor,
@@ -503,7 +552,10 @@ def simulate_run(
     log, log_path = runlog.make_logger(run_dir, name="simulate")
     log.info(
         "simulate: run_dir=%s radius=%s noise_models=%s ps=%s",
-        run_dir, radius, sim.noise_models, sim.ps,
+        run_dir,
+        radius,
+        sim.noise_models,
+        sim.ps,
     )
     simulate_mod.augment(report, manifest, config, radius=radius)
     report.write(run_dir)
@@ -521,7 +573,9 @@ def simulate_run(
     return report
 
 
-def _print_console_summary(report: ExperimentReport, out_dir: Path, log_path: Path) -> None:
+def _print_console_summary(
+    report: ExperimentReport, out_dir: Path, log_path: Path
+) -> None:
     s = report.summary()
     print(report.to_text(), file=sys.stderr)
     html_path = (out_dir / "report.html").resolve()

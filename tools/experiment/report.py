@@ -73,7 +73,7 @@ class ExperimentRow:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExperimentRow":
+    def from_dict(cls, data: dict[str, Any]) -> ExperimentRow:
         known = set(cls.__dataclass_fields__)
         return cls(**{k: v for k, v in data.items() if k in known})
 
@@ -112,7 +112,7 @@ class ExperimentReport:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExperimentReport":
+    def from_dict(cls, data: dict[str, Any]) -> ExperimentReport:
         """Reconstruct a report from a serialized ``report.json`` payload (round-trips ``to_dict``)."""
         return cls(
             rows=[ExperimentRow.from_dict(r) for r in data.get("rows", [])],
@@ -121,7 +121,7 @@ class ExperimentReport:
         )
 
     @classmethod
-    def from_json(cls, path: str | Path) -> "ExperimentReport":
+    def from_json(cls, path: str | Path) -> ExperimentReport:
         """Load a report from a ``report.json`` file or the run directory that contains it."""
         path = Path(path)
         if path.is_dir():
@@ -223,7 +223,7 @@ class ExperimentReport:
                 f'<span class="gname" title="{html.escape(r.gadget_id)}">{html.escape(r.gadget_id)}</span></td>'
             ),
             self._links_cell(r, gv),
-            f'<td>{html.escape(r.convention)}</td>',
+            f"<td>{html.escape(r.convention)}</td>",
             _num_td(r.k),
             _num_td(r.manhattan_radius),
             _num_td(r.window),
@@ -238,7 +238,9 @@ class ExperimentReport:
         ]
         main = (
             f'<tr class="datarow {r.status_kind}" data-kind="{r.status_kind}" '
-            f'data-gadget="{html.escape(r.gadget_id.lower())}">' + "".join(cells) + "</tr>"
+            f'data-gadget="{html.escape(r.gadget_id.lower())}">'
+            + "".join(cells)
+            + "</tr>"
         )
         detail = (
             f'<tr class="detail" id="d{index}" hidden><td colspan="15">'
@@ -264,7 +266,7 @@ class ExperimentReport:
         if gv.get("block_graph_html"):
             links.append(
                 f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" '
-                f'rel="noopener" title="3D block graph with Pauli web">3D</a>'
+                f'rel="noopener" title="3D block graph with observable surface">3D</a>'
             )
         inner = " &middot; ".join(links) if links else "&ndash;"
         return f'<td class="col-links">{inner}</td>'
@@ -276,35 +278,57 @@ class ExperimentReport:
         if r.oracle_verdicts:
             items = "".join(
                 f"<li>{html.escape(name)}: "
-                f'{"equivalent" if v.get("equivalent") else "not equivalent"}'
-                f' &mdash; {html.escape(str(v.get("detail", "")))}</li>'
+                f"{'equivalent' if v.get('equivalent') else 'not equivalent'}"
+                f" &mdash; {html.escape(str(v.get('detail', '')))}</li>"
                 for name, v in r.oracle_verdicts.items()
             )
             parts.append(f"<div><b>oracles</b><ul>{items}</ul></div>")
 
         structure: list[str] = []
         if gv.get("zx_png"):
-            structure.append(f'<figure><figcaption>positioned ZX</figcaption><img src="{gv["zx_png"]}" alt="positioned ZX"/></figure>')
+            structure.append(
+                f'<figure><figcaption>positioned ZX</figcaption><img src="{gv["zx_png"]}" alt="positioned ZX"/></figure>'
+            )
         elif gv.get("zx_link"):
-            structure.append(f'<a class="link" href="{html.escape(gv["zx_link"])}" target="_blank" rel="noopener">positioned ZX (open image — large graph)</a>')
+            structure.append(
+                f'<a class="link" href="{html.escape(gv["zx_link"])}" target="_blank" rel="noopener">positioned ZX (open image — large graph)</a>'
+            )
         if gv.get("block_graph_html"):
-            structure.append(f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" rel="noopener">block graph (Pauli web)</a>')
+            structure.append(
+                f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" rel="noopener">block graph</a>'
+            )
         if structure:
-            parts.append('<div class="structure"><b>structure</b><div class="pics">' + "".join(structure) + "</div></div>")
+            parts.append(
+                '<div class="structure"><b>structure</b><div class="pics">'
+                + "".join(structure)
+                + "</div></div>"
+            )
 
         v = r.visuals or {}
         links: list[str] = []
         if v.get("crumble"):
-            links.append(f'<a class="link" href="{html.escape(v["crumble"])}" target="_blank" rel="noopener">crumble</a>')
+            links.append(
+                f'<a class="link" href="{html.escape(v["crumble"])}" target="_blank" rel="noopener">crumble</a>'
+            )
         if v.get("circuit"):
-            links.append(f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" rel="noopener">annotated circuit</a>')
+            links.append(
+                f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" rel="noopener">annotated circuit</a>'
+            )
         if v.get("detector_free"):
-            links.append(f'<a class="link" href="{html.escape(v["detector_free"])}" target="_blank" rel="noopener">detector-free circuit</a>')
+            links.append(
+                f'<a class="link" href="{html.escape(v["detector_free"])}" target="_blank" rel="noopener">detector-free circuit</a>'
+            )
         if links:
-            parts.append('<div class="links"><b>circuit</b> ' + " &middot; ".join(links) + "</div>")
+            parts.append(
+                '<div class="links"><b>circuit</b> '
+                + " &middot; ".join(links)
+                + "</div>"
+            )
 
         if r.ler_plot:
-            parts.append(f'<figure class="ler"><figcaption>logical error rate</figcaption><img src="{r.ler_plot}" alt="LER plot"/></figure>')
+            parts.append(
+                f'<figure class="ler"><figcaption>logical error rate</figcaption><img src="{r.ler_plot}" alt="LER plot"/></figure>'
+            )
 
         return "".join(parts) or "<p><i>no additional details</i></p>"
 

@@ -53,9 +53,13 @@ def load_block_graph(path, graph_name: str = ""):
         data = json.loads(Path(path).read_text())
         graph = BlockGraph(graph_name or data.get("name", ""))
         for cube in data.get("cubes", []):
-            graph.add_cube(Position3D(*cube["position"]), cube["kind"], cube.get("label", ""))
+            graph.add_cube(
+                Position3D(*cube["position"]), cube["kind"], cube.get("label", "")
+            )
         for pipe in data.get("pipes", []):
-            graph.add_pipe(Position3D(*pipe["u"]), Position3D(*pipe["v"]), pipe.get("kind"))
+            graph.add_pipe(
+                Position3D(*pipe["u"]), Position3D(*pipe["v"]), pipe.get("kind")
+            )
         return graph
     except Exception:
         return None
@@ -69,10 +73,12 @@ def write_circuit(circuit: stim.Circuit, path: Path) -> Path:
 
 
 def write_block_graph_html(graph, path: Path, correlation_surface=None) -> Path | None:
-    """Write ``BlockGraph.view_as_html`` (optionally showing a Pauli web) and return the path."""
+    """Write ``BlockGraph.view_as_html`` (optionally showing a the logical observable surface) and return the path."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        graph.view_as_html(write_html_filepath=str(path), show_correlation_surface=correlation_surface)
+        graph.view_as_html(
+            write_html_filepath=str(path), show_correlation_surface=correlation_surface
+        )
         return path
     except Exception:
         return None
@@ -87,7 +93,6 @@ def _render_zx_png(graph, title: str | None) -> bytes | None:
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-
         from tqec.interop.pyzx import plot_positioned_zx_graph
     except Exception:
         return None
@@ -112,7 +117,9 @@ def positioned_zx_png_data_uri(graph, *, title: str | None = None) -> str | None
     return f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}"
 
 
-def write_positioned_zx_png(graph, path: Path, *, title: str | None = None) -> Path | None:
+def write_positioned_zx_png(
+    graph, path: Path, *, title: str | None = None
+) -> Path | None:
     """Write the positioned ZX diagram to a PNG file and return the path (for large graphs)."""
     png = _render_zx_png(graph, title)
     if png is None:
