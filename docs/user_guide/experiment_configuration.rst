@@ -118,7 +118,7 @@ Oracles are **optional** and never enabled by default: ``tqec``'s native annotat
 reliable ground truth for most gadgets, so no oracle ships pre-registered. Supply your own only
 where you have a known-correct reference that shares the gadget's macroscopic (logical) behavior.
 Comparison is by logical equivalence -- the two annotations' ``DETECTOR`` / ``OBSERVABLE`` parity
-subspaces must span the same space over GF(2) -- not byte-equality.
+subspaces must span the same space over GF(2).
 
 Two kinds are provided:
 

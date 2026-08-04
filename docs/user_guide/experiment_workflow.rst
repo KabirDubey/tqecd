@@ -88,8 +88,7 @@ Re-using a run without recompiling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Every run persists its full config to ``<out>/config.json``, its prepared noiseless circuits under
-``<out>/mr<radius>/``, and the authoritative ``<out>/report.json``. Two flags reuse that on-disk
-data at very different cost:
+``<out>/mr<radius>/``, and the authoritative ``<out>/report.json``. You can reuse that on-disk data using either of following flags, where re-rendering is cheaper than re-annotating:
 
 ``--render <out>`` rebuilds ``report.html`` (and ``report.txt`` / ``report.csv``) from the existing
 ``report.json`` -- **UI only**. No circuits are read, no annotation runs, and no scores change; it
