@@ -13,34 +13,33 @@ The spec this notebook demonstrates is ``tools/experiment/SPEC.md``.
 
 import marimo
 
-__generated_with = "0.10.0"
+__generated_with = "0.23.16"
 app = marimo.App(width="medium")
 
 
 @app.cell
 def _():
     import marimo as mo
+
     return (mo,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
-        # The gadget experiment workflow
+    mo.md(r"""
+    # The gadget experiment workflow
 
-        Build a gadget's circuits **once**, then re-measure and re-draw them cheaply. Every stage
-        reads the previous stage's on-disk output and writes into the same run directory. This
-        notebook runs each stage live; the written contract is `tools/experiment/SPEC.md`.
+    Build a gadget's circuits **once**, then re-measure and re-draw them cheaply. Every stage
+    reads the previous stage's on-disk output and writes into the same run directory. This
+    notebook runs each stage live; the written contract is `tools/experiment/SPEC.md`.
 
-        | stage | what it does | recompiles? |
-        | --- | --- | --- |
-        | **run** | compile (via `tqec.orchestration`) + re-annotate with `tqecd` + score | yes (once) |
-        | **render** | rebuild `report.html` from `report.json` -- UI only | no |
-        | **reannotate** | re-annotate + re-score the prepared circuits | no |
-        | **simulate** | measure LER-vs-p under a noise model | no |
-        """
-    )
+    | stage | what it does | recompiles? |
+    | --- | --- | --- |
+    | **run** | compile (via `tqec.orchestration`) + re-annotate with `tqecd` + score | yes (once) |
+    | **render** | rebuild `report.html` from `report.json` -- UI only | no |
+    | **reannotate** | re-annotate + re-score the prepared circuits | no |
+    | **simulate** | measure LER-vs-p under a noise model | no |
+    """)
     return
 
 
@@ -77,11 +76,8 @@ def _(mo):
     }
     mo.md(f"Run directory for this session: `{out_dir}`")
     return (
-        Basis,
         ExperimentConfig,
         GADGETS,
-        Path,
-        gallery,
         out_dir,
         reannotate_run,
         render_report,
@@ -126,7 +122,7 @@ def _(
     )
     report = run_experiment([GADGETS[gadget.value]()], config, out_dir, show_progress=False)
     mo.md(f"```\n{report.to_text()}\n```")
-    return config, report
+    return (report,)
 
 
 @app.cell(hide_code=True)
@@ -138,7 +134,7 @@ def _(mo, out_dir, report):
 
 
 @app.cell(hide_code=True)
-def _(mo, render_report, report):
+def _(mo, report):
     render_btn = mo.ui.run_button(label="▶ Re-render (UI only)")
     _ = report
     mo.vstack([
