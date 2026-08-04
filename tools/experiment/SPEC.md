@@ -66,9 +66,14 @@ non-ready row carried into the report, not a silent drop.
 
 `report.html` is a single self-contained file: compact default table, always-visible external
 links (crumble / annotated stim / 3D block graph), per-row expandable details (notes, oracle
-results, positioned-ZX + block-graph pictures, circuit and detector-free links,
-failure-directed stim diagrams, LER plot), selectable columns (incl. runtime), accessible sortable
-headers, and result/text filters. Runtime totals/means are summarized in the text footer.
+results, positioned-ZX + block-graph pictures, circuit and detector-free links, LER plot),
+selectable columns (incl. runtime), accessible sortable headers, and result/text filters. Runtime
+totals/means are summarized in the text footer.
+
+The 3D block-graph viewer is written for every gadget, including pipeless single-cube ones (memory,
+stability) that `tqec`'s `BlockGraph.from_json` rejects -- the tool loads them with a tolerant
+fallback. The positioned ZX diagram is inlined for small graphs and, for graphs with more than 20
+cubes, written to a PNG file and linked instead, so a large gadget never bloats the report.
 
 ## Outputs (run dir layout)
 
@@ -92,8 +97,10 @@ gadget -- the executable companion to this spec.
 
 - **No `native` / lightStim / stimflow gold-standard comparison.** Validation is ground-truth-free
   (invariants above); `native_missing` is shown only as a reference.
-- **No `timeslice-svg` visual.** Interactive time-slicing is available via the crumble link;
-  det-slice and match-graph cover failure debugging.
+- **No embedded stim circuit diagrams** (detector slices, match graphs, timeslice / timeline SVGs).
+  They scaled to tens of megabytes per gadget and made the report unopenable; the circuit is
+  inspected through the crumble link and the written `.stim` files, and structure through the
+  positioned ZX diagram and 3D block-graph viewer.
 - **No `selection` selectors** (`all` / `indices` / `last`). Inputs are listed directly via
   `--gallery` / `--input`; observable selection is `logical_observables`.
 - **No compile-only stage.** `tqec.orchestration.prepare_batch` owns compilation; `run` invokes it

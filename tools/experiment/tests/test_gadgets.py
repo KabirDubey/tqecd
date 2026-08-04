@@ -25,7 +25,7 @@ from tools.experiment.tests.fixtures import (
     hadamard_arrangements,
 )
 
-from tqec.gallery import cnot, three_cnots
+from tqec.gallery import cnot, memory, three_cnots
 from tqec.orchestration import BatchConfig, prepare_batch
 from tqec.utils.enums import Basis
 
@@ -227,6 +227,33 @@ def test_runtime_recorded(out_dir):
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     scored = _ready(report)
     assert scored and all(r.runtime_s is not None and r.runtime_s > 0 for r in scored)
+
+
+# the 3D block-graph link and ZX picture are produced even for a pipeless single-cube gadget
+# (tqec's BlockGraph.from_json rejects those; the tool's tolerant loader must handle them)
+def test_gadget_visuals_for_pipeless_gadget(out_dir):
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,))
+    report = run_experiment([memory(Basis.Z)], config, out_dir)
+    gid = _ready(report)[0].gadget_id
+    gv = report.gadget_visuals.get(gid, {})
+    assert gv.get("block_graph_html"), "single-cube gadget must still get a 3D block-graph link"
+    assert gv.get("zx_png") or gv.get("zx_link"), "single-cube gadget must still get a ZX picture"
+    # stim circuit diagrams are no longer embedded in any row
+    assert all("diagrams" not in (r.visuals or {}) for r in report.rows)
+
+
+# a block graph with more than ZX_INLINE_MAX_NODES cubes gets a linked ZX image, not an inlined one
+def test_zx_linked_for_large_graph(out_dir, monkeypatch):
+    from tools.experiment import visuals
+    monkeypatch.setattr(visuals, "ZX_INLINE_MAX_NODES", 0)  # force the "large graph" path
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
+                              manhattan_radii=(2,))
+    report = run_experiment([cnot(Basis.Z)], config, out_dir)
+    gid = _ready(report)[0].gadget_id
+    gv = report.gadget_visuals.get(gid, {})
+    assert gv.get("zx_link") and not gv.get("zx_png"), "large graph must link the ZX, not inline it"
+    assert (out_dir / gv["zx_link"]).is_file(), "the linked ZX PNG must exist on disk"
 
 
 # simulate_run measures the prepared circuits under a chosen noise model without recompiling

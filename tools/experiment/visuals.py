@@ -1,14 +1,16 @@
-"""Debugging visuals for the report: stim diagrams, crumble links, and graph pictures.
+"""Debugging visuals for the report: crumble links and block-graph / ZX pictures.
 
-Everything here is best-effort and side-effect-light: each helper returns ``None`` (or skips) if
-a diagram cannot be produced, so a rendering problem never breaks a run. Small SVGs (detector
-slices, match graphs) are cheap and are inlined into the report; heavier artifacts (the block-graph
-3D viewer, the full circuit) are written to files under the run directory and linked.
+Everything here is best-effort and side-effect-light: each helper returns ``None`` (or skips) if a
+picture cannot be produced, so a rendering problem never breaks a run.
 
-Failure-directed visuals (:func:`diagnostic_kinds`) pick the stim diagram that actually helps for a
-given failure: a short code distance is best seen in the match graph and detector slices, a missing
-parity in the detector slices next to the detector-free circuit, a compile failure in the block
-graph and ZX pictures (the circuit does not exist yet).
+Stim's own circuit diagrams (detector slices, match graphs, timeslice / timeline SVGs) are no
+longer produced or embedded: they scaled to tens of megabytes per gadget and made the report
+unopenable. The circuit is still inspectable through the crumble link and the written ``.stim``
+files; the structure is shown by the positioned ZX diagram and the 3D block-graph viewer.
+
+The positioned ZX diagram is inlined into the report for small graphs and written to a file and
+linked for large ones (more than :data:`ZX_INLINE_MAX_NODES` cubes), so a big gadget never bloats
+the single-file report.
 """
 
 from __future__ import annotations
@@ -20,12 +22,8 @@ import stim
 
 CRUMBLE_BASE = "https://algassert.com/crumble"
 
-# stim diagram kinds we use, smallest first.
-DETSLICE = "detslice-svg"
-DETSLICE_OPS = "detslice-with-ops-svg"
-MATCHGRAPH = "matchgraph-svg"
-TIMESLICE = "timeslice-svg"
-TIMELINE = "timeline-svg"
+# Block graphs with more than this many cubes get a linked ZX picture instead of an inlined one.
+ZX_INLINE_MAX_NODES = 20
 
 
 def crumble_url(circuit: stim.Circuit) -> str:
@@ -33,35 +31,34 @@ def crumble_url(circuit: stim.Circuit) -> str:
     return f"{CRUMBLE_BASE}#circuit={urllib.parse.quote(str(circuit), safe='')}"
 
 
-def diagram_svg(circuit: stim.Circuit, kind: str) -> str | None:
-    """Return the SVG text of a stim diagram, or ``None`` if it cannot be produced."""
+def load_block_graph(path, graph_name: str = ""):
+    """Load a ``BlockGraph`` from its saved JSON, tolerating pipeless (single-cube) graphs.
+
+    ``tqec``'s ``BlockGraph.from_json`` rejects any graph with zero pipes (memory and stability
+    gadgets are a single cube), so this falls back to rebuilding the graph from the JSON with
+    ``add_cube`` / ``add_pipe`` when the built-in reader refuses it. Returns ``None`` if neither
+    path works.
+    """
+    from tqec.computation.block_graph import BlockGraph
+
     try:
-        return str(circuit.diagram(kind))
+        return BlockGraph.from_json(path, graph_name=graph_name)
+    except Exception:
+        pass
+    try:
+        import json
+
+        from tqec.utils.position import Position3D
+
+        data = json.loads(Path(path).read_text())
+        graph = BlockGraph(graph_name or data.get("name", ""))
+        for cube in data.get("cubes", []):
+            graph.add_cube(Position3D(*cube["position"]), cube["kind"], cube.get("label", ""))
+        for pipe in data.get("pipes", []):
+            graph.add_pipe(Position3D(*pipe["u"]), Position3D(*pipe["v"]), pipe.get("kind"))
+        return graph
     except Exception:
         return None
-
-
-def diagnostic_kinds(status: str, error: str = "") -> list[str]:
-    """Pick the stim diagram kinds most useful for debugging a given outcome.
-
-    Args:
-        status: the unit/row status (``"ready"`` rows are scored; others are prep failures).
-        error: the failure message, used to distinguish a distance shortfall from a parity gap.
-
-    Returns:
-        Diagram kinds to render for this row. A prep/compile failure has no circuit, so it returns
-        an empty list (the block-graph/ZX pictures cover it instead).
-    """
-    text = error.lower()
-    if status != "ready":
-        # Import / compile / observable failures have no circuit to slice.
-        return []
-    if "distance" in text or "graphlike" in text:
-        return [MATCHGRAPH, DETSLICE]
-    if "parit" in text:
-        return [DETSLICE, DETSLICE_OPS]
-    # A passing (or otherwise scored) row: a compact detector slice is the cheap default.
-    return [DETSLICE]
 
 
 def write_circuit(circuit: stim.Circuit, path: Path) -> Path:
@@ -81,10 +78,9 @@ def write_block_graph_html(graph, path: Path, correlation_surface=None) -> Path 
         return None
 
 
-def positioned_zx_png_data_uri(graph, *, title: str | None = None) -> str | None:
-    """Render the block graph's positioned ZX diagram as a base64 PNG ``data:`` URI."""
+def _render_zx_png(graph, title: str | None) -> bytes | None:
+    """Render the block graph's positioned ZX diagram to PNG bytes, or ``None`` on failure."""
     try:
-        import base64
         import io
 
         import matplotlib
@@ -101,7 +97,26 @@ def positioned_zx_png_data_uri(graph, *, title: str | None = None) -> str | None
         buffer = io.BytesIO()
         fig.savefig(buffer, format="png", dpi=110, bbox_inches="tight")
         plt.close(fig)
-        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        return buffer.getvalue()
     except Exception:
         return None
+
+
+def positioned_zx_png_data_uri(graph, *, title: str | None = None) -> str | None:
+    """Render the block graph's positioned ZX diagram as a base64 PNG ``data:`` URI (inline)."""
+    import base64
+
+    png = _render_zx_png(graph, title)
+    if png is None:
+        return None
+    return f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}"
+
+
+def write_positioned_zx_png(graph, path: Path, *, title: str | None = None) -> Path | None:
+    """Write the positioned ZX diagram to a PNG file and return the path (for large graphs)."""
+    png = _render_zx_png(graph, title)
+    if png is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(png)
+    return path

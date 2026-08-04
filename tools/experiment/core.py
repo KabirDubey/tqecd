@@ -131,21 +131,31 @@ def _ensure_gadget_visuals(
     if gid in gadget_visuals or not getattr(unit, "graph", None):
         return
     gadget_visuals[gid] = {}
-    try:
-        from tqec.computation.block_graph import BlockGraph
-
-        graph = BlockGraph.from_json(manifest.run_dir / unit.graph, graph_name=gid)
-    except Exception as exc:
-        log.info("gadget visuals: could not load graph for %s: %s", gid, exc)
+    graph = visuals.load_block_graph(manifest.run_dir / unit.graph, graph_name=gid)
+    if graph is None:
+        log.info("gadget visuals: could not load graph for %s", gid)
         return
     try:
         surfaces = graph.find_correlation_surfaces()
         surface = surfaces[0] if surfaces else None
     except Exception:
         surface = None
-    zx = visuals.positioned_zx_png_data_uri(graph, title=gid)
-    if zx:
-        gadget_visuals[gid]["zx_png"] = zx
+    # Positioned ZX: inline for small graphs, linked to a PNG file for large ones so a big gadget
+    # never bloats the single-file report.
+    try:
+        n_nodes = len(list(graph.cubes))
+    except Exception:
+        n_nodes = 0
+    if n_nodes > visuals.ZX_INLINE_MAX_NODES:
+        written_zx = visuals.write_positioned_zx_png(graph, artifacts / gid / "positioned_zx.png", title=gid)
+        if written_zx:
+            gadget_visuals[gid]["zx_link"] = _relpath(written_zx, out_dir)
+    else:
+        zx = visuals.positioned_zx_png_data_uri(graph, title=gid)
+        if zx:
+            gadget_visuals[gid]["zx_png"] = zx
+    # The 3D block-graph viewer is written for every gadget (including pipeless single-cube ones),
+    # so the report's 3D link is never missing.
     bg_path = artifacts / gid / "block_graph.html"
     written = visuals.write_block_graph_html(graph, bg_path, correlation_surface=surface)
     if written:
@@ -156,11 +166,14 @@ def _attach_visuals(
     row: ExperimentRow,
     native: stim.Circuit,
     reannotated: stim.Circuit,
-    config: ExperimentConfig,
     artifacts: Path,
     out_dir: Path,
 ) -> None:
-    """Write per-row circuit artifacts and failure-directed stim diagrams onto ``row.visuals``."""
+    """Write per-row circuit artifacts (crumble link + ``.stim`` files) onto ``row.visuals``.
+
+    Stim's embedded circuit diagrams are no longer produced; the circuit is inspected through the
+    crumble link and the written ``.stim`` files instead.
+    """
     cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}_r{row.manhattan_radius}_w{row.window}"
     v: dict[str, Any] = {}
     try:
@@ -172,23 +185,6 @@ def _attach_visuals(
         )
     except Exception:
         pass
-
-    error = "" if row.distance_ok is not False else "distance"
-    if row.parities_ok is False:
-        error = "parities"
-    diagrams: list[dict[str, str]] = []
-    for kind in visuals.diagnostic_kinds(row.status, error):
-        source = reannotated
-        if kind == visuals.MATCHGRAPH:
-            try:
-                source = _noisy(reannotated, config.noise_models[0], config.ps[0])
-            except Exception:
-                source = reannotated
-        svg = visuals.diagram_svg(source, kind)
-        if svg:
-            diagrams.append({"label": kind, "svg": svg})
-    if diagrams:
-        v["diagrams"] = diagrams
     row.visuals = v
 
 
@@ -275,7 +271,7 @@ def _score_and_render(
         reannotated = annotate.reannotate(native, window=window)
         row = _score(native, reannotated, unit, k, radius, window, config, oracles)
         row.runtime_s = time.perf_counter() - started
-        _attach_visuals(row, native, reannotated, config, artifacts, out_dir)
+        _attach_visuals(row, native, reannotated, artifacts, out_dir)
         rows.append(row)
         log.info(
             "score %s [%s] k=%s r=%s w=%s missing=%s dist=%s pass=%s",

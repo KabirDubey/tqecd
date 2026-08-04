@@ -285,6 +285,8 @@ class ExperimentReport:
         structure: list[str] = []
         if gv.get("zx_png"):
             structure.append(f'<figure><figcaption>positioned ZX</figcaption><img src="{gv["zx_png"]}" alt="positioned ZX"/></figure>')
+        elif gv.get("zx_link"):
+            structure.append(f'<a class="link" href="{html.escape(gv["zx_link"])}" target="_blank" rel="noopener">positioned ZX (open image — large graph)</a>')
         if gv.get("block_graph_html"):
             structure.append(f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" rel="noopener">block graph (Pauli web)</a>')
         if structure:
@@ -300,16 +302,6 @@ class ExperimentReport:
             links.append(f'<a class="link" href="{html.escape(v["detector_free"])}" target="_blank" rel="noopener">detector-free circuit</a>')
         if links:
             parts.append('<div class="links"><b>circuit</b> ' + " &middot; ".join(links) + "</div>")
-
-        diagrams = v.get("diagrams") or []
-        if diagrams:
-            figs = "".join(
-                f'<figure><figcaption>{html.escape(d["label"])}</figcaption>{d["svg"]}</figure>'
-                for d in diagrams
-                if d.get("svg")
-            )
-            if figs:
-                parts.append('<div class="diagrams"><b>diagnostics</b><div class="pics">' + figs + "</div></div>")
 
         if r.ler_plot:
             parts.append(f'<figure class="ler"><figcaption>logical error rate</figcaption><img src="{r.ler_plot}" alt="LER plot"/></figure>')
