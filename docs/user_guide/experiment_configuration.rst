@@ -36,8 +36,9 @@ Experiment options
     ``"distance"`` (shortest graphlike error vs ``2k+1``). Default ``("parities", "distance")``.
 
 ``oracles``
-    Names of registered reference oracles to apply (see `Oracles`_). Empty by default -- there is
-    no ground truth unless you supply one.
+    Names of registered reference oracles to apply (see `Oracles`_). One is built in: ``"native"``
+    (tqec's own annotation as the ground truth for the tqecd reannotation, ``fixed_bulk`` only).
+    Otherwise there is no ground truth unless you supply one.
 
 ``noise_models``
     Noise model(s) for the ``distance`` predictor (the first is used): ``"uniform_depolarizing"``
@@ -114,11 +115,24 @@ Load and run it:
 Oracles
 -------
 
-Oracles are **optional** and never enabled by default: ``tqec``'s native annotation is not a
-reliable ground truth for most gadgets, so no oracle ships pre-registered. Supply your own only
-where you have a known-correct reference that shares the gadget's macroscopic (logical) behavior.
-Comparison is by logical equivalence -- the two annotations' ``DETECTOR`` / ``OBSERVABLE`` parity
-subspaces must span the same space over GF(2).
+Oracles are **optional** and never enabled by default. Comparison is by logical equivalence --
+the two annotations' ``DETECTOR`` / ``OBSERVABLE`` parity subspaces must span the same space over
+GF(2).
+
+The subject under test is always ``tqecd.annotate_detectors_automatically`` (the reannotation).
+The built-in **``native``** oracle uses ``tqec``'s own native annotation as its ground truth and is
+the easiest way to check the reannotation against tqec: just select it by name.
+
+.. code-block:: bash
+
+    python -m tools.experiment --gallery memory --k 1,2 --oracles native
+
+It applies only to the ``fixed_bulk`` convention (where native is the reliable reference; it is
+*not* trustworthy for most other gadgets, which is why nothing else ships pre-registered). Note it
+is a logical-equivalence check: it confirms the reannotation spans native's parity space, but a
+reannotation can be logically equivalent yet still fail the ``distance`` predictor (e.g. redundant
+detectors that break graphlike decodability) -- the two signals are complementary. Supply your own
+oracle only where you have a known-correct reference that shares the gadget's macroscopic behavior.
 
 Two kinds are provided:
 

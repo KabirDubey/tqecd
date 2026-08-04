@@ -17,6 +17,13 @@ A reference is expected to share the gadget's logical action, so agreement is ch
 ``OBSERVABLE`` parity subspaces span the same space over GF(2), not by byte-equality. Register an
 oracle with :func:`register_oracle` (resolved by name from config) or pass oracle objects straight
 to :func:`tools.experiment.core.run_experiment`.
+
+One built-in oracle ships registered: :data:`NATIVE_ORACLE`, named ``"native"``. It uses ``tqec``'s
+own native annotation (the subtemplate route in ``tqec.compile.detectors.compute``) as the ground
+truth for the ``tqecd.annotate_detectors_automatically`` reannotation under test. This is the one
+documented exception to "no ground truth": native is a reliable reference **for the ``fixed_bulk``
+convention** (so the oracle only applies there). It is still opt-in -- nothing runs it unless a run
+selects it by name (``oracles = ["native"]`` in a config, or ``--oracles native`` on the CLI).
 """
 
 from __future__ import annotations
@@ -173,5 +180,21 @@ def build_oracles(names: list[str]) -> list[Oracle]:
 
 
 def available_oracles() -> list[str]:
-    """Names of the currently registered oracles (empty unless a user registered any)."""
+    """Names of the currently registered oracles (``"native"`` plus any the user registered)."""
     return sorted(_REGISTRY)
+
+
+def _native_reference(unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
+    """Reference emitter for the built-in native oracle: tqec's own native annotation."""
+    return native
+
+
+def _is_fixed_bulk(unit: object, config: "ExperimentConfig") -> bool:
+    """native is a reliable reference only for the ``fixed_bulk`` convention."""
+    return getattr(unit, "convention", "") == "fixed_bulk"
+
+
+#: Built-in oracle: tqec's native ``fixed_bulk`` annotation as ground truth for the
+#: ``annotate_detectors_automatically`` reannotation under test. Opt in with ``oracles=["native"]``.
+NATIVE_ORACLE = CallableOracle(name="native", emit=_native_reference, applies_to=_is_fixed_bulk)
+register_oracle(NATIVE_ORACLE)
