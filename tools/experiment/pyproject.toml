@@ -32,9 +32,9 @@ notebook = ["marimo>=0.9"]
 dev = ["pytest>=8.0"]
 
 # The experiment tool consumes the batch interface from a local tqec checkout on the branch that
-# carries `tqec.orchestration`. Point this at your tqec working tree.
+# carries `tqec.orchestration`. Point this at your tqec working tree (relative to THIS file).
 [tool.uv.sources]
-tqec = { path = "../../../tqec", editable = true }
+tqec = { path = "../../../../tqecBugFixes/tqecKD", editable = true }
 
 [tool.pytest.ini_options]
 # Keep this suite out of tqecd's own collection; run it explicitly with
