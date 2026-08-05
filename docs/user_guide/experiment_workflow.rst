@@ -56,8 +56,8 @@ The tool has its own ``pyproject.toml`` under ``tools/experiment`` and is not in
 * ``tqecd`` with windowed detector completion (the ``window=`` argument);
 * ``tqec`` providing ``tqec.orchestration`` (point ``[tool.uv.sources].tqec`` at your tqec
   checkout);
-* ``stim`` and ``numpy`` (core), and optionally ``polars`` / ``matplotlib`` for CSV export and
-  plots.
+* ``stim`` (core), and optionally ``matplotlib`` for the LER plots (``orjson`` is used for the
+  JSON if present).
 
 Run from the command line:
 
@@ -156,8 +156,7 @@ Run a CNOT across both conventions and three code distances, then read the repor
 
 * ``report.json`` -- the full structured result (one row per gadget / convention / k / radius / window);
 * ``report.html`` -- a self-contained, sortable table (embedded LER plots when simulation runs);
-* ``report.txt`` -- the same table as plain text;
-* ``report.csv`` -- a flat table (written only when ``polars`` is installed).
+* ``report.txt`` -- the same table as plain text.
 
 Each row records ``missing_parities`` (0 means the annotation is complete), ``distance`` versus
 ``expected_distance`` (``2k+1``), and an overall ``predictors_pass``. A gadget that ``tqec``

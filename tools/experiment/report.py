@@ -1,10 +1,11 @@
 """Experiment rows and reports: ``report.json`` + a self-contained ``report.html`` + text + CSV.
 
 ``report.json`` is the authoritative detailed artifact; ``report.html`` is the human-facing view.
-The HTML is a single self-contained file (inline CSS/JS, no CDN) with a compact default table,
-per-row expandable details (status, notes, oracle results, structure pictures, circuit links and
-debugging diagrams), selectable columns, accessible sortable headers, and result/text filters.
-Optional ``orjson`` is used for JSON and ``polars`` for CSV when present.
+The HTML is a single self-contained file (inline CSS/JS, no CDN): each gadget's 3D block-graph link
+and decorated ZX picture sit in their own columns beside the gadget name; every column is
+toggleable; the result badge and observable explain themselves on hover; rows shade on hover; and
+an expandable detail row carries oracle results, circuit links and the LER plot. Optional
+``orjson`` is used for the JSON when present.
 """
 
 from __future__ import annotations
@@ -41,6 +42,31 @@ _BADGE_TEXT = {
     SIM_FAIL: "sim fail",
 }
 
+# Leaf columns in display order: (key, label, default_visible). Every column is toggleable.
+# name / block_graph / zx are the subcolumns of the "Gadget" group in the two-row header.
+_COL_SPECS: tuple[tuple[str, str, bool], ...] = (
+    ("result", "Result", True),
+    ("name", "Gadget", True),
+    ("block_graph", "3D", True),
+    ("zx", "ZX", True),
+    ("observable", "Observable", True),
+    ("convention", "Convention", True),
+    ("k", "k", True),
+    ("radius", "Radius", False),
+    ("window", "Window", True),
+    ("missing", "Missing parities", True),
+    ("distance", "Distance", True),
+    ("expected", "Expected", False),
+    ("native", "Native missing", False),
+    ("lambda", "Lambda", False),
+    ("runtime", "Runtime (s)", False),
+    ("links", "Links", True),
+    ("notes", "Notes", True),
+    ("source", "Source", False),
+    ("status", "Status", False),
+)
+_NLEAF = len(_COL_SPECS)
+
 
 @dataclass
 class ExperimentRow:
@@ -62,6 +88,7 @@ class ExperimentRow:
     distance_ok: bool | None = None
     predictors_pass: bool | None = None
     native_missing: int | None = None
+    observable: str = ""
     oracle_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     visuals: dict[str, Any] = field(default_factory=dict)
     ler_plot: str | None = None
@@ -134,28 +161,13 @@ class ExperimentReport:
         (out / "report.json").write_bytes(_dumps(self.to_dict()))
         (out / "report.html").write_text(self.to_html(), encoding="utf-8")
         (out / "report.txt").write_text(self.to_text(), encoding="utf-8")
-        self._maybe_write_dataframe(out)
         return out / "report.json"
-
-    def _maybe_write_dataframe(self, out: Path) -> None:
-        try:
-            import polars as pl
-        except ModuleNotFoundError:
-            return
-        flat = []
-        for r in self.rows:
-            d = r.to_dict()
-            d["oracle_verdicts"] = json.dumps(d["oracle_verdicts"])
-            d.pop("visuals", None)
-            d.pop("ler_plot", None)
-            flat.append(d)
-        if flat:
-            pl.DataFrame(flat).write_csv(out / "report.csv")
 
     # Plain-text table: readable column names, no abbreviations that need a key.
     _COLUMNS = (
         ("status_kind", "result"),
         ("gadget_id", "gadget"),
+        ("observable", "observable"),
         ("convention", "convention"),
         ("k", "k"),
         ("manhattan_radius", "radius"),
@@ -208,33 +220,43 @@ class ExperimentReport:
         show_plots = "" if has_plots else ' style="display:none"'
         html_out = _HTML
         html_out = html_out.replace("__CHIPS__", chips)
+        html_out = html_out.replace("__HEADER__", self._header_html())
+        html_out = html_out.replace("__MENU__", self._menu_html())
+        html_out = html_out.replace("__DEFAULTS__", self._defaults_json())
         html_out = html_out.replace("__ROWS__", rows_html)
         html_out = html_out.replace("__SHOWPLOTS__", show_plots)
         return html_out
 
     def _row_html(self, index: int, r: ExperimentRow) -> str:
-        badge = _BADGE_TEXT.get(r.status_kind, r.status_kind or "?")
         gv = self.gadget_visuals.get(r.gadget_id, {})
+        badge = _BADGE_TEXT.get(r.status_kind, r.status_kind or "?")
+        explanation = _result_explanation(r)
         cells = [
-            f'<td class="col-result"><span class="badge {r.status_kind}">{html.escape(badge)}</span></td>',
-            (
-                f'<td class="col-gadget"><button class="expand" aria-expanded="false" '
-                f'aria-controls="d{index}" title="show details">&#9656;</button>'
-                f'<span class="gname" title="{html.escape(r.gadget_id)}">{html.escape(r.gadget_id)}</span></td>'
-            ),
-            self._links_cell(r, gv),
-            f"<td>{html.escape(r.convention)}</td>",
-            _num_td(r.k),
-            _num_td(r.manhattan_radius),
-            _num_td(r.window),
-            _num_td(r.missing_parities),
-            _num_td(r.distance),
-            _num_td(r.expected_distance, optional=True, col="expected"),
-            _num_td(r.native_missing, optional=True, col="native"),
-            _num_td(r.lambda_factor, optional=True, col="lambda"),
-            _num_td(r.runtime_s, optional=True, col="runtime"),
-            f'<td class="opt" data-col="source">{html.escape(r.source)}</td>',
-            f'<td class="opt" data-col="status">{html.escape(r.status)}</td>',
+            # 0 result -- the badge explains its pass/fail condition on hover (item 9)
+            f'<td class="col-result" data-col="result"><span class="badge {r.status_kind}" '
+            f'title="{html.escape(explanation)}">{html.escape(badge)}</span></td>',
+            # 1 gadget name -- clicking it (or the arrow) expands the detail row
+            f'<td class="col-gadget" data-col="name"><button class="expand" aria-expanded="false" '
+            f'aria-controls="d{index}" title="show details">&#9656;</button>'
+            f'<span class="gname" title="{html.escape(r.gadget_id)}">{html.escape(r.gadget_id)}</span></td>',
+            # 2 3D block-graph link, 3 decorated ZX thumbnail -- Gadget subcolumns (item 3)
+            f'<td data-col="block_graph">{_block_graph_cell(gv)}</td>',
+            f'<td data-col="zx">{_zx_cell(gv)}</td>',
+            _text_td(r.observable, "observable"),
+            _text_td(r.convention, "convention"),
+            _num_td(r.k, "k"),
+            _num_td(r.manhattan_radius, "radius"),
+            _num_td(r.window, "window"),
+            _num_td(r.missing_parities, "missing"),
+            _num_td(r.distance, "distance"),
+            _num_td(r.expected_distance, "expected"),
+            _num_td(r.native_missing, "native"),
+            _num_td(r.lambda_factor, "lambda"),
+            _num_td(r.runtime_s, "runtime"),
+            self._links_cell(r),
+            _text_td(r.notes, "notes"),
+            _text_td(r.source, "source"),
+            _text_td(r.status, "status"),
         ]
         main = (
             f'<tr class="datarow {r.status_kind}" data-kind="{r.status_kind}" '
@@ -243,14 +265,14 @@ class ExperimentReport:
             + "</tr>"
         )
         detail = (
-            f'<tr class="detail" id="d{index}" hidden><td colspan="15">'
+            f'<tr class="detail" id="d{index}" hidden><td colspan="{_NLEAF}">'
             + self._detail_html(r, gv)
             + "</td></tr>"
         )
         return main + "\n" + detail
 
-    def _links_cell(self, r: ExperimentRow, gv: dict[str, Any]) -> str:
-        """Always-visible compact hyperlinks so links appear without expanding the row."""
+    def _links_cell(self, r: ExperimentRow) -> str:
+        """Compact crumble / stim hyperlinks (the 3D link now has its own Gadget subcolumn)."""
         v = r.visuals or {}
         links: list[str] = []
         if v.get("crumble"):
@@ -263,18 +285,11 @@ class ExperimentReport:
                 f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" '
                 f'rel="noopener" title="annotated .stim circuit">stim</a>'
             )
-        if gv.get("block_graph_html"):
-            links.append(
-                f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" '
-                f'rel="noopener" title="3D block graph with observable surface">3D</a>'
-            )
         inner = " &middot; ".join(links) if links else "&ndash;"
-        return f'<td class="col-links">{inner}</td>'
+        return f'<td class="col-links" data-col="links">{inner}</td>'
 
     def _detail_html(self, r: ExperimentRow, gv: dict[str, Any]) -> str:
         parts: list[str] = []
-        if r.notes:
-            parts.append(f'<p class="notes"><b>notes:</b> {html.escape(r.notes)}</p>')
         if r.oracle_verdicts:
             items = "".join(
                 f"<li>{html.escape(name)}: "
@@ -283,26 +298,6 @@ class ExperimentReport:
                 for name, v in r.oracle_verdicts.items()
             )
             parts.append(f"<div><b>oracles</b><ul>{items}</ul></div>")
-
-        structure: list[str] = []
-        if gv.get("zx_png"):
-            structure.append(
-                f'<figure><figcaption>positioned ZX</figcaption><img src="{gv["zx_png"]}" alt="positioned ZX"/></figure>'
-            )
-        elif gv.get("zx_link"):
-            structure.append(
-                f'<a class="link" href="{html.escape(gv["zx_link"])}" target="_blank" rel="noopener">positioned ZX (open image — large graph)</a>'
-            )
-        if gv.get("block_graph_html"):
-            structure.append(
-                f'<a class="link" href="{html.escape(gv["block_graph_html"])}" target="_blank" rel="noopener">block graph</a>'
-            )
-        if structure:
-            parts.append(
-                '<div class="structure"><b>structure</b><div class="pics">'
-                + "".join(structure)
-                + "</div></div>"
-            )
 
         v = r.visuals or {}
         links: list[str] = []
@@ -320,9 +315,7 @@ class ExperimentReport:
             )
         if links:
             parts.append(
-                '<div class="links"><b>circuit</b> '
-                + " &middot; ".join(links)
-                + "</div>"
+                '<div class="links"><b>circuit</b> ' + " &middot; ".join(links) + "</div>"
             )
 
         if r.ler_plot:
@@ -331,6 +324,47 @@ class ExperimentReport:
             )
 
         return "".join(parts) or "<p><i>no additional details</i></p>"
+
+    def _header_html(self) -> str:
+        """Two-row header: a Gadget group spanning name / 3D / ZX; every other column is flat."""
+        labels = {key: label for key, label, _ in _COL_SPECS}
+        idx = {key: i for i, (key, _, _) in enumerate(_COL_SPECS)}
+        numeric = {
+            "k", "radius", "window", "missing", "distance",
+            "expected", "native", "lambda", "runtime",
+        }
+        unsortable = {"block_graph", "zx", "links"}
+
+        def th(key: str, rowspan: int = 1) -> str:
+            cls = ' class="num"' if key in numeric else ""
+            rs = f' rowspan="{rowspan}"' if rowspan != 1 else ""
+            label = html.escape(labels[key])
+            inner = label if key in unsortable else f'<button type="button">{label}</button>'
+            sort = "" if key in unsortable else ' aria-sort="none"'
+            return f'<th{cls} data-col="{key}" data-idx="{idx[key]}"{rs} scope="col"{sort}>{inner}</th>'
+
+        row1 = [
+            "<tr>",
+            th("result", rowspan=2),
+            '<th class="group" data-col="__group_gadget" colspan="3" scope="colgroup">Gadget</th>',
+        ]
+        for key, _, _ in _COL_SPECS:
+            if key in ("result", "name", "block_graph", "zx"):
+                continue
+            row1.append(th(key, rowspan=2))
+        row1.append("</tr>")
+        row2 = ["<tr>", th("name"), th("block_graph"), th("zx"), "</tr>"]
+        return "".join(row1) + "\n" + "".join(row2)
+
+    def _menu_html(self) -> str:
+        """A checkbox per column so every column is toggleable (item 6)."""
+        return "".join(
+            f'<label><input type="checkbox" data-colcb="{key}"/> {html.escape(label)}</label>'
+            for key, label, _ in _COL_SPECS
+        )
+
+    def _defaults_json(self) -> str:
+        return json.dumps({key: default for key, _, default in _COL_SPECS})
 
 
 def _fmt(value: Any) -> str:
@@ -345,12 +379,65 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
-def _num_td(value: Any, *, optional: bool = False, col: str = "") -> str:
+def _text_td(value: Any, col: str) -> str:
+    text = _fmt(value)
+    return f'<td data-col="{col}" title="{html.escape(text)}">{html.escape(text)}</td>'
+
+
+def _num_td(value: Any, col: str) -> str:
     text = _fmt(value)
     sort = "" if value is None else str(value)
-    cls = "num opt" if optional else "num"
-    colattr = f' data-col="{col}"' if col else ""
-    return f'<td class="{cls}"{colattr} data-sort-value="{html.escape(sort)}">{html.escape(text)}</td>'
+    return (
+        f'<td class="num" data-col="{col}" '
+        f'data-sort-value="{html.escape(sort)}">{html.escape(text)}</td>'
+    )
+
+
+def _block_graph_cell(gv: dict[str, Any]) -> str:
+    """The Gadget "3D" subcolumn: a link to the 3D block-graph viewer, or a dash."""
+    href = gv.get("block_graph_html")
+    if href:
+        return (
+            f'<a class="link" href="{html.escape(href)}" target="_blank" rel="noopener" '
+            f'title="3D block graph with the observable surface">3D</a>'
+        )
+    return "&ndash;"
+
+
+def _zx_cell(gv: dict[str, Any]) -> str:
+    """The Gadget "ZX" subcolumn: an inline decorated-ZX thumbnail, a link, or a dash."""
+    png = gv.get("zx_png")
+    if png:
+        return (
+            f'<a href="{png}" target="_blank" rel="noopener" title="open full-size positioned ZX">'
+            f'<img class="zxthumb" src="{png}" alt="positioned ZX with observable"/></a>'
+        )
+    link = gv.get("zx_link")
+    if link:
+        return (
+            f'<a class="link" href="{html.escape(link)}" target="_blank" rel="noopener" '
+            f'title="positioned ZX (large graph)">ZX</a>'
+        )
+    return "&ndash;"
+
+
+def _result_explanation(r: ExperimentRow) -> str:
+    """Plain-language reason for the row's result badge, shown as its hover tooltip (item 9)."""
+    if r.status_kind == PASS:
+        return (
+            f"pass: annotation complete (0 missing parities) and "
+            f"distance {r.distance} == expected {r.expected_distance}"
+        )
+    if r.status_kind == PREDICTOR_FAIL:
+        return "predictor fail: " + (
+            r.notes or "did not reach full distance / parity completeness"
+        )
+    if r.status_kind == PREP_FAIL:
+        base = "prep fail: tqec could not prepare this gadget"
+        return f"{base} ({r.notes})" if r.notes else base
+    if r.status_kind == SIM_FAIL:
+        return "sim fail: the simulation stage failed for this row"
+    return "not scored: no predictors were run for this row"
 
 
 _HTML = r"""<!doctype html>
@@ -361,9 +448,9 @@ _HTML = r"""<!doctype html>
 <title>Gadget experiment report</title>
 <style>
 :root { color-scheme: light dark; --bg:#fff; --fg:#111; --line:#d8dde3; --head:#f6f8fa; --muted:#57606a;
-  --pass:#1a7f37; --pfail:#cf222e; --prep:#9a6700; --skip:#57606a; --sim:#8250df; --accent:#0969da; }
+  --pass:#1a7f37; --pfail:#cf222e; --prep:#9a6700; --skip:#57606a; --sim:#8250df; --accent:#0969da; --hover:#eef1f4; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --line:#30363d; --head:#161b22;
-  --muted:#8b949e; --pass:#3fb950; --pfail:#f85149; --prep:#d29922; --skip:#8b949e; --sim:#a371f7; --accent:#58a6ff; } }
+  --muted:#8b949e; --pass:#3fb950; --pfail:#f85149; --prep:#d29922; --skip:#8b949e; --sim:#a371f7; --accent:#58a6ff; --hover:#1b2129; } }
 * { box-sizing: border-box; }
 body { font-family: ui-sans-serif, system-ui, sans-serif; margin: clamp(.5rem, 2vw, 2rem); background: var(--bg); color: var(--fg); }
 h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
@@ -387,16 +474,16 @@ th { background: var(--head); position: sticky; top: 0; z-index: 2; }
 th button { all: unset; cursor: pointer; font-weight: 600; }
 th[aria-sort=ascending] button::after { content: " \25B2"; } th[aria-sort=descending] button::after { content: " \25BC"; }
 td.num, th.num { text-align: right; }
-.col-result, .col-gadget { position: sticky; left: 0; background: var(--bg); z-index: 1; }
-.col-gadget { left: 5.5rem; }
-th.col-result, th.col-gadget { z-index: 3; background: var(--head); }
+th.group { text-align: center; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+tbody tr.datarow:hover > td { background: var(--hover); }
+.zxthumb { max-height: 2.6rem; width: auto; border: 1px solid var(--line); background: #fff; vertical-align: middle; cursor: zoom-in; }
+.hidden-col { display: none !important; }
 .gname { cursor: pointer; display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .badge { font-size: .72rem; padding: .1rem .45rem; border-radius: 999px; color: #fff; }
 .badge.pass { background: var(--pass); } .badge.predictor_fail { background: var(--pfail); }
 .badge.prep_fail { background: var(--prep); } .badge.not_scored { background: var(--skip); } .badge.sim_fail { background: var(--sim); }
 button.expand { all: unset; cursor: pointer; color: var(--muted); margin-right: .3rem; }
 button.expand[aria-expanded=true] { transform: rotate(90deg); display: inline-block; }
-.opt { display: none; }
 tr.detail td { background: var(--head); white-space: normal; }
 tr.detail .pics { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
 tr.detail figure { margin: .3rem 0; } tr.detail img, tr.detail svg { max-width: 22rem; height: auto; border: 1px solid var(--line); background: #fff; }
@@ -418,38 +505,15 @@ tr.detail figcaption { font-size: .8rem; color: var(--muted); }
     <button type="button" data-seg="not_scored" aria-pressed="false">Not scored</button>
   </span>
   <details class="cols"><summary>Columns</summary>
-    <div class="menu">
-      <label><input type="checkbox" data-col="expected"/> Expected distance</label>
-      <label><input type="checkbox" data-col="native"/> Native missing</label>
-      <label><input type="checkbox" data-col="lambda"/> Lambda</label>
-      <label><input type="checkbox" data-col="runtime"/> Runtime (s)</label>
-      <label><input type="checkbox" data-col="source"/> Source</label>
-      <label><input type="checkbox" data-col="status"/> Status</label>
-    </div>
+    <div class="menu">__MENU__</div>
   </details>
   <label class="switch"__SHOWPLOTS__><input type="checkbox" id="plots" checked/> Show plots</label>
 </div>
 
 <div class="wrap" tabindex="0">
 <table id="t">
-<caption>One row per (gadget, convention, k, radius, window). Click a header to sort; click the arrow to expand details.</caption>
-<thead><tr>
-<th class="col-result" scope="col" aria-sort="none"><button type="button">Result</button></th>
-<th class="col-gadget" scope="col" aria-sort="none"><button type="button">Gadget</button></th>
-<th class="col-links" scope="col" title="external links">Links</th>
-<th scope="col" aria-sort="none"><button type="button">Convention</button></th>
-<th class="num" scope="col" aria-sort="none"><button type="button">k</button></th>
-<th class="num" scope="col" aria-sort="none" title="Manhattan radius"><button type="button">Radius</button></th>
-<th class="num" scope="col" aria-sort="none" title="tqecd matching window"><button type="button">Window</button></th>
-<th class="num" scope="col" aria-sort="none"><button type="button">Missing parities</button></th>
-<th class="num" scope="col" aria-sort="none"><button type="button">Distance</button></th>
-<th class="num opt" data-col="expected" scope="col" aria-sort="none"><button type="button">Expected</button></th>
-<th class="num opt" data-col="native" scope="col" aria-sort="none" title="native annotation missing parities"><button type="button">Native missing</button></th>
-<th class="num opt" data-col="lambda" scope="col" aria-sort="none"><button type="button">Lambda</button></th>
-<th class="num opt" data-col="runtime" scope="col" aria-sort="none" title="annotation + analysis wall time"><button type="button">Runtime (s)</button></th>
-<th class="opt" data-col="source" scope="col" aria-sort="none"><button type="button">Source</button></th>
-<th class="opt" data-col="status" scope="col" aria-sort="none"><button type="button">Status</button></th>
-</tr></thead>
+<caption>One row per (gadget, convention, k, radius, window). Click a header to sort; click a gadget name to expand its details. Use Columns to show or hide any column.</caption>
+<thead>__HEADER__</thead>
 <tbody>
 __ROWS__
 </tbody>
@@ -482,18 +546,30 @@ tb.addEventListener("click", (e) => {
   detail.hidden = open;
 });
 
-// column visibility
+// column visibility -- every column toggleable; the Gadget group's colspan tracks visible members.
+// Uses a class with !important (not inline display) so re-showing a default-hidden column works.
+const DEFAULTS = __DEFAULTS__;
+const GROUPS = { gadget: ['name', 'block_graph', 'zx'] };
+state.cols = state.cols || {};
+for (const k in DEFAULTS) if (!(k in state.cols)) state.cols[k] = DEFAULTS[k];
+function colVisible(c) { return state.cols[c] !== false; }
 function applyCols() {
-  document.querySelectorAll('[data-col]').forEach(el => {
+  document.querySelectorAll('td[data-col], th[data-col]').forEach(el => {
     const c = el.getAttribute('data-col');
-    if (el.matches('input')) return;
-    el.style.display = state.cols && state.cols[c] ? '' : 'none';
+    if (c.indexOf('__group') === 0) return;
+    el.classList.toggle('hidden-col', !colVisible(c));
   });
+  for (const g in GROUPS) {
+    const th = document.querySelector('th[data-col="__group_' + g + '"]');
+    if (!th) continue;
+    const vis = GROUPS[g].filter(colVisible);
+    th.colSpan = Math.max(vis.length, 1);
+    th.classList.toggle('hidden-col', vis.length === 0);
+  }
 }
-document.querySelectorAll('.menu input[data-col]').forEach(cb => {
-  const c = cb.getAttribute('data-col');
-  state.cols = state.cols || {};
-  cb.checked = !!state.cols[c];
+document.querySelectorAll('.menu input[data-colcb]').forEach(cb => {
+  const c = cb.getAttribute('data-colcb');
+  cb.checked = colVisible(c);
   cb.addEventListener('change', () => { state.cols[c] = cb.checked; save(); applyCols(); });
 });
 
@@ -534,9 +610,12 @@ document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () =
   state.seg = seg; save(); applyFilter();
 }));
 
-// sorting via header buttons, typed by data-sort-value when present
-table.querySelectorAll('thead th').forEach((th, i) => {
-  th.querySelector('button').addEventListener('click', () => {
+// sorting via header buttons; body cells follow data-idx order regardless of the grouped header
+table.querySelectorAll('thead th[data-idx]').forEach(th => {
+  const btn = th.querySelector('button');
+  if (!btn) return;
+  const i = parseInt(th.getAttribute('data-idx'), 10);
+  btn.addEventListener('click', () => {
     const asc = th.getAttribute('aria-sort') !== 'ascending';
     table.querySelectorAll('thead th').forEach(x => x.setAttribute('aria-sort', 'none'));
     th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');

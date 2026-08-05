@@ -44,6 +44,23 @@ def _noisy(circuit: stim.Circuit, noise_model: str, p: float) -> stim.Circuit:
     return factory(p).noisy_circuit(circuit)
 
 
+def _observable_label(unit: Any) -> str:
+    """The simulated observable(s) as a compact string of external stabilizers (item 4)."""
+    observables = getattr(unit, "logical_observables", ()) or ()
+    return ", ".join(o.external_stabilizer for o in observables)
+
+
+def _failure_reason(row: ExperimentRow) -> str:
+    """A one-line reason a scored row failed its predictors, for the report's Notes column."""
+    reasons: list[str] = []
+    if row.parities_ok is False and row.missing_parities is not None:
+        plural = "y" if row.missing_parities == 1 else "ies"
+        reasons.append(f"{row.missing_parities} missing parit{plural}")
+    if row.distance_ok is False:
+        reasons.append(f"distance {row.distance} != expected {row.expected_distance}")
+    return "; ".join(reasons)
+
+
 def _status_kind(unit_status: str, predictors_pass: bool | None) -> str:
     """Classify a row for the report's distinct visual states."""
     if unit_status != "ready":
@@ -74,6 +91,7 @@ def _score(
         manhattan_radius=radius,
         window=window,
         status=unit.status,
+        observable=_observable_label(unit),
     )
 
     if config.run_parities:
@@ -90,6 +108,8 @@ def _score(
     checks = [ok for ok in (row.parities_ok, row.distance_ok) if ok is not None]
     row.predictors_pass = all(checks) if checks else None
     row.status_kind = _status_kind(unit.status, row.predictors_pass)
+    if row.predictors_pass is False:
+        row.notes = _failure_reason(row)
 
     for oracle in oracles:
         if oracle.applies(unit, config):
