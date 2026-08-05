@@ -144,11 +144,16 @@ class ExperimentConfig:
             rendered = _toml_value(value)
             if rendered is not None:
                 lines.append(f"{key} = {rendered}")
+        # Only spell out the MCMC-sampling parameters when sampling is actually enabled; otherwise
+        # a config that never samples should not display shots / errors / decoders.
         lines += ["", "[experiment.simulation]"]
-        for key, value in simulation.items():
-            rendered = _toml_value(value)
-            if rendered is not None:
-                lines.append(f"{key} = {rendered}")
+        if simulation.get("enabled"):
+            for key, value in simulation.items():
+                rendered = _toml_value(value)
+                if rendered is not None:
+                    lines.append(f"{key} = {rendered}")
+        else:
+            lines.append("enabled = false")
         return "\n".join(lines) + "\n"
 
     # construction
