@@ -188,7 +188,7 @@ def test_render_rebuilds_ui_from_report_json(out_dir):
     assert rebuilt.gadget_visuals == original.gadget_visuals
     # ...and report.html is regenerated with its embedded pictures and links.
     html_text = (out_dir / "report.html").read_text()
-    assert "col-links" in html_text and "data:image/png" in html_text
+    assert 'data-col="links"' in html_text and "data:image/png" in html_text
 
 
 # render fails clearly when there is no report.json to rebuild from
