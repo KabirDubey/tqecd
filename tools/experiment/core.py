@@ -393,6 +393,10 @@ def run_experiment(
     from tqec.orchestration import prepare_batch
 
     out_dir = Path(out_dir)
+    if not inputs and config.inputs:
+        from tools.experiment import gadgets
+
+        inputs = gadgets.resolve_inputs(config.inputs)  # the config defines its own inputs
     log, log_path = runlog.make_logger(out_dir)
     log.info(
         "start: conventions=%s ks=%s windows=%s inputs=%d",

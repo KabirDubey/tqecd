@@ -26,58 +26,11 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
+from tools.experiment import gadgets
 from tools.experiment.config import ExperimentConfig
 from tools.experiment.core import run_experiment
-
-
-def _gallery_builders() -> dict[str, Callable[[], Any]]:
-    """A zero-arg builder for every gadget in ``tqec.gallery`` (plus open-port variants).
-
-    Every builder in ``tqec.gallery`` is wired here, so the CLI can drive the whole gallery. The
-    ``*_open`` variants leave the ports open (``prepare_batch`` then fills them for simulation).
-    """
-    from tqec import gallery
-    from tqec.utils.enums import Basis
-
-    return {
-        "cnot": lambda: gallery.cnot(Basis.Z),
-        "cnot_open": lambda: gallery.cnot(None),
-        "cz": lambda: gallery.cz(),
-        "memory": lambda: gallery.memory(Basis.Z),
-        "move_rotation": lambda: gallery.move_rotation(Basis.Z),
-        "move_rotation_open": lambda: gallery.move_rotation(None),
-        "stability": lambda: gallery.stability(Basis.Z),
-        "steane_encoding": lambda: gallery.steane_encoding(Basis.Z),
-        "steane_encoding_open": lambda: gallery.steane_encoding(None),
-        "three_cnots": lambda: gallery.three_cnots(Basis.Z),
-        "three_cnots_open": lambda: gallery.three_cnots(None),
-    }
-
-
-# The canonical gadgets `--gallery all` runs (the closed, port-filled form of every gallery entry).
-_GALLERY_ALL = (
-    "cnot",
-    "cz",
-    "memory",
-    "move_rotation",
-    "stability",
-    "steane_encoding",
-    "three_cnots",
-)
-
-
-def _gallery_graphs(name: str) -> list[Any]:
-    """Build the requested gallery input(s); ``all`` builds every canonical gadget."""
-    builders = _gallery_builders()
-    if name == "all":
-        return [builders[n]() for n in _GALLERY_ALL]
-    if name not in builders:
-        raise SystemExit(
-            f"unknown gallery gadget {name!r}; choose from {sorted(builders)} or 'all'"
-        )
-    return [builders[name]()]
 
 
 def _ints(text: str) -> tuple[int, ...]:
@@ -89,7 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--config", type=Path, help="TOML experiment config")
     source.add_argument(
-        "--gallery", help="gallery gadget name, or 'all' for every gadget (see --list-gallery)"
+        "--gallery",
+        help="a gallery gadget, tool batch, or 'all' (see --list-gallery)",
+        metavar="NAME",
     )
     source.add_argument(
         "--input", type=Path, action="append", help=".dae / .bgraph input (repeatable)"
@@ -144,8 +99,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list_gallery:
-        print("gallery gadgets:", ", ".join(sorted(_gallery_builders())))
-        print("'all' runs every canonical gadget:", ", ".join(_GALLERY_ALL))
+        avail = gadgets.available_inputs()
+        print("gallery gadgets:", ", ".join(avail["gallery"]))
+        print("tool batches: ", ", ".join(avail["batches"]))
+        print("'all' runs every canonical gallery gadget:", ", ".join(gadgets.GALLERY_ALL))
         return 0
 
     if args.clean is not None:
@@ -234,17 +191,17 @@ def main(argv: list[str] | None = None) -> int:
         config = config.with_overrides(**overrides)
 
     if args.gallery:
-        inputs = _gallery_graphs(args.gallery)
+        specs = [args.gallery]
     elif args.input:
-        missing = [str(p) for p in args.input if not Path(p).exists()]
-        if missing:
-            raise SystemExit(
-                f"--input file(s) not found: {', '.join(missing)} "
-                "(pass an existing .dae or .bgraph path)"
-            )
-        inputs = [str(p) for p in args.input]
-    else:  # config-only run defaults to a cnot smoke gadget
-        inputs = _gallery_graphs("cnot")
+        specs = [str(p) for p in args.input]
+    elif config.inputs:
+        specs = list(config.inputs)  # the config fully defines its own inputs
+    else:  # nothing specified anywhere -> a cnot smoke gadget
+        specs = ["cnot"]
+    try:
+        inputs = gadgets.resolve_inputs(specs)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
 
     report = run_experiment(inputs, config, args.out)  # prints the console summary + open hint
     s = report.summary()

@@ -52,6 +52,8 @@ class SimulationConfig:
 class ExperimentConfig:
     """Knobs for a batched gadget experiment. Lowers to a ``tqec.orchestration.BatchConfig``."""
 
+    name: str = ""
+    inputs: tuple[str, ...] = ()
     conventions: tuple[str, ...] = ("fixed_bulk",)
     ks: tuple[int, ...] = (1, 2, 3)
     windows: tuple[int, ...] = (2,)
@@ -107,6 +109,8 @@ class ExperimentConfig:
     def to_dict(self) -> dict[str, Any]:
         """A round-trippable dict (``from_dict(to_dict()) == self``), persisted for ``render``."""
         return {
+            "name": self.name,
+            "inputs": list(self.inputs),
             "conventions": list(self.conventions),
             "ks": list(self.ks),
             "windows": list(self.windows),
@@ -126,6 +130,7 @@ class ExperimentConfig:
         known = {f for f in cls.__dataclass_fields__}
         kwargs: dict[str, Any] = {k: v for k, v in data.items() if k in known}
         for name in (
+            "inputs",
             "conventions",
             "ks",
             "windows",
