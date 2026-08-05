@@ -3,11 +3,6 @@
 Everything here is best-effort and side-effect-light: each helper returns ``None`` (or skips) if a
 picture cannot be produced, so a rendering problem never breaks a run.
 
-Stim's own circuit diagrams (detector slices, match graphs, timeslice / timeline SVGs) are no
-longer produced or embedded: they scaled to tens of megabytes per gadget and made the report
-unopenable. The circuit is still inspectable through the crumble link and the written ``.stim``
-files; the structure is shown by the positioned ZX diagram and the 3D block-graph viewer.
-
 The positioned ZX diagram is inlined into the report for small graphs and written to a file and
 linked for large ones (more than :data:`ZX_INLINE_MAX_NODES` cubes), so a big gadget never bloats
 the single-file report.
@@ -86,7 +81,9 @@ def write_block_graph_html(
         graph.view_as_html(
             write_html_filepath=str(path),
             show_correlation_surface=correlation_surface,
-            pop_faces_at_directions=pop_faces if correlation_surface is not None else (),
+            pop_faces_at_directions=pop_faces
+            if correlation_surface is not None
+            else (),
         )
         return path
     except Exception:
