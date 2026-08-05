@@ -259,6 +259,12 @@ class ExperimentReport:
                 "default": "parities" in predictors,
                 "numeric": True,
                 "value": num("missing_parities"),
+                "htitle": (
+                    "Missing parities -- independent deterministic parities the tqecd annotation "
+                    "failed to capture. Reduces stim's complete deterministic-parity space (flow "
+                    "generators) against the emitted DETECTOR/OBSERVABLE subspace over GF(2), via "
+                    "tqecd's BinaryVectorBasis. 0 = complete. Static, no sampling."
+                ),
             },
             {
                 "key": "distance",
@@ -266,6 +272,14 @@ class ExperimentReport:
                 "default": "distance" in predictors,
                 "numeric": True,
                 "value": num("distance"),
+                "htitle": (
+                    "Distance -- graphlike code distance of the noisy circuit "
+                    "(stim.shortest_graphlike_error): an analytic minimum-weight search over the "
+                    "detector error model, NOT a sampled/MCMC value. It applies noise_models[0] at "
+                    "ps[0] to build the circuit, but the result depends on the noise MODEL, not the "
+                    "p value. '-' means no graphlike (<=2-symptom) decomposition exists. Compared to "
+                    "Expected."
+                ),
             },
             {
                 "key": "expected",
@@ -273,6 +287,7 @@ class ExperimentReport:
                 "default": False,
                 "numeric": True,
                 "value": num("expected_distance"),
+                "htitle": "Expected distance -- the target, 2k+1 by default (from expected_distance).",
             },
             {
                 "key": "runtime",
@@ -280,6 +295,10 @@ class ExperimentReport:
                 "default": True,
                 "numeric": True,
                 "value": num("runtime_s"),
+                "htitle": (
+                    "Runtime -- wall time of the tqecd re-annotation plus predictor analysis for "
+                    "this row (excludes oracle scoring and MCMC sampling)."
+                ),
             },
             {"key": "links", "label": "Links", "default": True, "render": _links_cell},
             {
@@ -308,6 +327,10 @@ class ExperimentReport:
                     "mlabel": f"{name} dist",
                     "default": True,
                     "numeric": True,
+                    "htitle": (
+                        f"{name} distance -- this oracle's annotation scored with the same analytic "
+                        "shortest_graphlike_error metric as the experimental Distance column."
+                    ),
                     "value": (
                         lambda n: (
                             lambda r: (r.oracle_results.get(n) or {}).get("distance")
@@ -357,7 +380,9 @@ class ExperimentReport:
             label = html.escape(col["label"])
             inner = f'<button type="button">{label}</button>' if sortable else label
             sort = ' aria-sort="none"' if sortable else ""
-            return f'<th{cls} data-col="{col["key"]}" data-idx="{idx}"{rs} scope="col"{sort}>{inner}</th>'
+            # hover text on the header explaining what a predictor computes and its backend
+            title = f' title="{html.escape(col["htitle"])}"' if col.get("htitle") else ""
+            return f'<th{cls} data-col="{col["key"]}" data-idx="{idx}"{rs} scope="col"{sort}{title}>{inner}</th>'
 
         row1, row2, opened = ["<tr>"], ["<tr>"], set()
         for idx, col in enumerate(cols):

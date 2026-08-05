@@ -117,7 +117,10 @@ def shortest_graphlike_error(
 
     This is an analytic minimum-weight search over the detector error model: it does not
     sample the circuit, so it never invokes the Sinter simulator and stays independent of
-    the optional simulation mode (which is the only sampling path).
+    the optional simulation mode (which is the only sampling path). The caller applies a noise
+    model at some physical error rate ``p`` to instantiate the error mechanisms, but the returned
+    weight (the distance) depends only on the noise *model*, not the ``p`` value -- any ``p`` in
+    ``(0, 1)`` gives the same result.
     """
     try:
         error = noisy_circuit.shortest_graphlike_error(

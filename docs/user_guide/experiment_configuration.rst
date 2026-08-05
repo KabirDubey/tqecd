@@ -45,11 +45,17 @@ Experiment options
     ``tqecd``). Default ``()`` -- just the experimental annotator.
 
 ``noise_models``
-    Noise model(s) for the ``distance`` predictor (the first is used): ``"uniform_depolarizing"``
-    or ``"si1000"``. Default ``("uniform_depolarizing",)``.
+    The noise **model** the ``distance`` predictor applies before its (analytic) minimum-weight
+    search -- only ``noise_models[0]`` is used. The distance depends on the model (which error
+    mechanisms exist and whether the detector error model is graphlike), so this choice matters.
+    ``"uniform_depolarizing"`` or ``"si1000"``. Default ``("uniform_depolarizing",)``.
 
 ``ps``
-    Physical error rate(s) for the ``distance`` predictor (the first is used). Default ``(1e-3,)``.
+    The physical error rate the ``distance`` predictor applies (only ``ps[0]`` is used) to
+    instantiate the error mechanisms. It is **not a sampling parameter**: ``shortest_graphlike_error``
+    is an analytic search whose result (the minimum error *count*) is independent of the ``p``
+    value -- any ``p`` in ``(0, 1)`` gives the same distance. The ``ps`` sweep that MCMC actually
+    *samples* over lives under ``[experiment.simulation]``. Default ``(1e-3,)``.
 
 ``expected_distance``
     Expression for the expected distance, evaluated with ``k`` in scope. Default ``"2*k + 1"``.
@@ -129,8 +135,9 @@ Two ship built in:
 
 * ``native`` -- ``tqec``'s own native annotation (the circuit ``prepare_batch`` wrote), every
   convention.
-* ``tqecd_main`` -- the main-branch (windowless) ``tqecd`` ``annotate_detectors_automatically``,
-  run out-of-process; it isolates the effect of windowing. Applies only when the main-branch
+* ``tqecd_main`` -- the main-branch ``tqecd`` ``annotate_detectors_automatically``,
+  run out-of-process; it isolates the effect of your change to ``tqecd``.
+  Applies only when the main-branch
   worktree is present (``.tqecd-main`` or ``TQECD_MAIN_SRC``).
 
 .. code-block:: bash
