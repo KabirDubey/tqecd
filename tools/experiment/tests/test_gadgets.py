@@ -135,28 +135,9 @@ def test_hadamard_arrangements_all_directions(out_dir):
     assert {r.convention for r in z_ready} == {"fixed_bulk", "fixed_boundary"}
 
 
-# FINAL B: sensitivity to manhattan_radius
-def test_manhattan_radius_sweep(out_dir):
-    # Sweeps the radius knob and records the (radius -> native_missing / distance) response. For a
-    # simple gadget like cnot the response is flat (radius-insensitive)--itself a correct,
-    # reportable result; harder gadgets are where a small radius starves the native annotation.
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(1, 2, 3))
-    report = run_experiment([cnot(Basis.Z)], config, out_dir)
-    ready = _ready(report)
-    assert {r.manhattan_radius for r in ready} == {1, 2, 3}
-    for row in ready:
-        assert row.missing_parities is not None
-        assert row.native_missing is not None
-        assert row.distance is not None
-    # reannotated annotation is complete at every radius (tqecd uses `window`, not manhattan_radius)
-    _assert_all_ready_pass(report)
-
-
 # reannotate_run re-scores a run from its on-disk circuits without recompiling
 def test_reannotate_reuses_prepared_circuits(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     original = run_experiment([cnot(Basis.Z)], config, out_dir)
     # the full config is persisted so a later reannotate can recover it
     assert (out_dir / "config.json").is_file()
@@ -164,7 +145,7 @@ def test_reannotate_reuses_prepared_circuits(out_dir):
         json.loads((out_dir / "config.json").read_text())
     ) == config
 
-    # leave mr2 intact and just re-annotate off disk. No prepare_batch is called.
+    # leave the prepared circuits intact and just re-annotate off disk. No prepare_batch is called.
     rescored = reannotate_run(out_dir)
     assert [(r.gadget_id, r.convention, r.k, r.window) for r in _ready(rescored)] == [
         (r.gadget_id, r.convention, r.k, r.window) for r in _ready(original)
@@ -174,8 +155,7 @@ def test_reannotate_reuses_prepared_circuits(out_dir):
 
 # reannotate can re-score with a different tqecd window without recompiling
 def test_reannotate_window_override(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     run_experiment([cnot(Basis.Z)], config, out_dir)
     rescored = reannotate_run(out_dir, overrides={"windows": (3,)})
     ready = _ready(rescored)
@@ -193,13 +173,12 @@ def test_reannotate_without_prepared_circuits(tmp_path):
 
 # render rebuilds report.html from report.json alone--no circuits, no annotation, no re-score
 def test_render_rebuilds_ui_from_report_json(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     original = run_experiment([cnot(Basis.Z)], config, out_dir)
 
     # remove everything except report.json: the prepared circuits, the HTML, the config.
     import shutil
-    shutil.rmtree(out_dir / "mr2")
+    shutil.rmtree(out_dir / "prepared")
     (out_dir / "report.html").unlink()
     (out_dir / "config.json").unlink()
 
@@ -222,8 +201,7 @@ def test_render_without_report_json(tmp_path):
 
 # every scored row records the wall time of annotation + analysis
 def test_runtime_recorded(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     scored = _ready(report)
     assert scored and all(r.runtime_s is not None and r.runtime_s > 0 for r in scored)
@@ -232,8 +210,7 @@ def test_runtime_recorded(out_dir):
 # the 3D block-graph link and ZX picture are produced even for a pipeless single-cube gadget
 # (tqec's BlockGraph.from_json rejects those; the tool's tolerant loader must handle them)
 def test_gadget_visuals_for_pipeless_gadget(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     report = run_experiment([memory(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
@@ -247,8 +224,7 @@ def test_gadget_visuals_for_pipeless_gadget(out_dir):
 def test_zx_linked_for_large_graph(out_dir, monkeypatch):
     from tools.experiment import visuals
     monkeypatch.setattr(visuals, "ZX_INLINE_MAX_NODES", 0)  # force the "large graph" path
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
@@ -262,7 +238,7 @@ def test_simulate_run_measures_without_rebuild(out_dir):
     pytest.importorskip("pymatching")
     from tools.experiment.config import SimulationConfig
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              manhattan_radii=(2,), simulation=SimulationConfig(max_shots=200))
+                              simulation=SimulationConfig(max_shots=200))
     run_experiment([cnot(Basis.Z)], config, out_dir)
     report = simulate_run(out_dir, noise_models=("uniform_depolarizing",), ps=(5e-3, 1e-2),
                           show_progress=False)

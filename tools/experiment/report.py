@@ -52,7 +52,6 @@ _COL_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("observable", "Observable", True),
     ("convention", "Convention", True),
     ("k", "k", True),
-    ("radius", "Radius", False),
     ("window", "Window", True),
     ("missing", "Missing parities", True),
     ("distance", "Distance", True),
@@ -70,14 +69,13 @@ _NLEAF = len(_COL_SPECS)
 
 @dataclass
 class ExperimentRow:
-    """One measured (gadget, convention, k, Manhattan radius, window) cell."""
+    """One measured (gadget, convention, k, window) cell."""
 
     gadget_id: str
     source: str
     name: str
     convention: str
     k: int
-    manhattan_radius: int
     window: int
     status: str
     status_kind: str = NOT_SCORED
@@ -170,7 +168,6 @@ class ExperimentReport:
         ("observable", "observable"),
         ("convention", "convention"),
         ("k", "k"),
-        ("manhattan_radius", "radius"),
         ("window", "window"),
         ("missing_parities", "missing parities"),
         ("distance", "distance"),
@@ -245,7 +242,6 @@ class ExperimentReport:
             _text_td(r.observable, "observable"),
             _text_td(r.convention, "convention"),
             _num_td(r.k, "k"),
-            _num_td(r.manhattan_radius, "radius"),
             _num_td(r.window, "window"),
             _num_td(r.missing_parities, "missing"),
             _num_td(r.distance, "distance"),
@@ -330,7 +326,7 @@ class ExperimentReport:
         labels = {key: label for key, label, _ in _COL_SPECS}
         idx = {key: i for i, (key, _, _) in enumerate(_COL_SPECS)}
         numeric = {
-            "k", "radius", "window", "missing", "distance",
+            "k", "window", "missing", "distance",
             "expected", "native", "lambda", "runtime",
         }
         unsortable = {"block_graph", "zx", "links"}
@@ -512,7 +508,7 @@ tr.detail figcaption { font-size: .8rem; color: var(--muted); }
 
 <div class="wrap" tabindex="0">
 <table id="t">
-<caption>One row per (gadget, convention, k, radius, window). Click a header to sort; click a gadget name to expand its details. Use Columns to show or hide any column.</caption>
+<caption>One row per (gadget, convention, k, window). Click a header to sort; click a gadget name to expand its details. Use Columns to show or hide any column.</caption>
 <thead>__HEADER__</thead>
 <tbody>
 __ROWS__

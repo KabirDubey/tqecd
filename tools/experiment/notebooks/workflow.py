@@ -118,7 +118,6 @@ def _(
         conventions=(convention.value,),
         ks=(kk.value,),
         windows=(win.value,),
-        manhattan_radii=(2,),
     )
     report = run_experiment([GADGETS[gadget.value]()], config, out_dir, show_progress=False)
     mo.md(f"```\n{report.to_text()}\n```")

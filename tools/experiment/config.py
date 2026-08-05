@@ -50,12 +50,11 @@ class SimulationConfig:
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    """Knobs for a batched gadget experiment. Lowers to ``BatchConfig`` per manhattan radius."""
+    """Knobs for a batched gadget experiment. Lowers to a ``tqec.orchestration.BatchConfig``."""
 
     conventions: tuple[str, ...] = ("fixed_bulk",)
     ks: tuple[int, ...] = (1, 2, 3)
     windows: tuple[int, ...] = (2,)
-    manhattan_radii: tuple[int, ...] = (2,)
     logical_observables: str = "all"
     predictors: tuple[str, ...] = ("parities", "distance")
     oracles: tuple[str, ...] = ()
@@ -80,12 +79,14 @@ class ExperimentConfig:
         return build_oracles(list(self.oracles))
 
     # lowering to BatchConfig
-    def to_batch_config(self, *, manhattan_radius: int) -> Any:
-        """Lower to a ``tqec.orchestration.BatchConfig`` for one manhattan radius.
+    def to_batch_config(self) -> Any:
+        """Lower to a ``tqec.orchestration.BatchConfig``.
 
-        When simulation is enabled the sweep values (``ps``, ``noise_models``, ``max_shots``,
-        ``decoders``) come from :attr:`simulation`, so the written manifest is directly usable by
-        ``simulate_batch``. Prepared circuits are noiseless, so this never affects the predictors.
+        ``manhattan_radius`` is deliberately not set: it sizes ``tqec``'s native subtemplate search
+        and has no effect on ``tqecd.annotate_detectors_automatically`` (the subject under test), so
+        the tool leaves it at ``tqec``'s own default. When simulation is enabled the sweep values
+        (``ps``, ``noise_models``, ``max_shots``, ``decoders``) come from :attr:`simulation`, so the
+        written manifest is directly usable by ``simulate_batch``.
         """
         from tqec.orchestration import BatchConfig
 
@@ -96,7 +97,6 @@ class ExperimentConfig:
             ps=sim.ps if sim.enabled else self.ps,
             noise_models=sim.noise_models if sim.enabled else self.noise_models,
             decoders=sim.decoders,
-            manhattan_radius=manhattan_radius,
             max_shots=sim.max_shots,
             max_errors=sim.max_errors,
             expected_distance=self.expected_distance,
@@ -110,7 +110,6 @@ class ExperimentConfig:
             "conventions": list(self.conventions),
             "ks": list(self.ks),
             "windows": list(self.windows),
-            "manhattan_radii": list(self.manhattan_radii),
             "logical_observables": self.logical_observables,
             "predictors": list(self.predictors),
             "oracles": list(self.oracles),
@@ -130,7 +129,6 @@ class ExperimentConfig:
             "conventions",
             "ks",
             "windows",
-            "manhattan_radii",
             "predictors",
             "oracles",
             "noise_models",

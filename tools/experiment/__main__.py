@@ -4,7 +4,7 @@ Examples::
 
     python -m tools.experiment --gallery cnot --k 1,2
     python -m tools.experiment --gallery all --k 1,2
-    python -m tools.experiment --config tools/experiment/configs/manhattan_sensitivity.toml
+    python -m tools.experiment --config tools/experiment/configs/ler.toml
     python -m tools.experiment --input my_gadget.dae --k 1,2,3
     python -m tools.experiment --render experiment_out                # rebuild report.html only
     python -m tools.experiment --reannotate experiment_out            # re-score from disk, no recompile
@@ -128,7 +128,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--k", type=_ints, help="comma-separated ks, e.g. 1,2,3")
     parser.add_argument("--conventions", type=lambda s: tuple(s.split(",")))
     parser.add_argument("--windows", type=_ints)
-    parser.add_argument("--manhattan-radii", type=_ints, dest="manhattan_radii")
     parser.add_argument("--oracles", type=lambda s: tuple(s.split(",")))
     parser.add_argument(
         "--noise-models",
@@ -200,7 +199,6 @@ def main(argv: list[str] | None = None) -> int:
             for flag, value in (
                 ("--k", args.k),
                 ("--conventions", args.conventions),
-                ("--manhattan-radii", args.manhattan_radii),
             )
             if value
         ]
@@ -230,8 +228,6 @@ def main(argv: list[str] | None = None) -> int:
         overrides["conventions"] = args.conventions
     if args.windows:
         overrides["windows"] = args.windows
-    if args.manhattan_radii:
-        overrides["manhattan_radii"] = args.manhattan_radii
     if args.oracles:
         overrides["oracles"] = args.oracles
     if overrides:

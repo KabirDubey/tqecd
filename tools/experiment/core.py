@@ -77,7 +77,6 @@ def _score(
     reannotated: stim.Circuit,
     unit: Any,
     k: int,
-    radius: int,
     window: int,
     config: ExperimentConfig,
     oracles: Sequence[Any],
@@ -88,7 +87,6 @@ def _score(
         name=getattr(unit, "name", ""),
         convention=unit.convention,
         k=k,
-        manhattan_radius=radius,
         window=window,
         status=unit.status,
         observable=_observable_label(unit),
@@ -119,7 +117,7 @@ def _score(
     return row
 
 
-def _prep_row(unit: Any, radius: int) -> ExperimentRow:
+def _prep_row(unit: Any) -> ExperimentRow:
     status = unit.status
     return ExperimentRow(
         gadget_id=unit.gadget_id,
@@ -127,7 +125,6 @@ def _prep_row(unit: Any, radius: int) -> ExperimentRow:
         name=getattr(unit, "name", ""),
         convention=unit.convention,
         k=-1,
-        manhattan_radius=radius,
         window=-1,
         status=status,
         status_kind=_status_kind(status, None),
@@ -225,11 +222,7 @@ def _attach_visuals(
     Stim's embedded circuit diagrams are no longer produced; the circuit is inspected through the
     crumble link and the written ``.stim`` files instead.
     """
-    cell = (
-        artifacts
-        / row.gadget_id
-        / f"{row.convention}_k{row.k}_r{row.manhattan_radius}_w{row.window}"
-    )
+    cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}_w{row.window}"
     v: dict[str, Any] = {}
     try:
         v["crumble"] = visuals.crumble_url(reannotated)
@@ -265,22 +258,23 @@ def _load_config(run_dir: Path) -> ExperimentConfig:
     return ExperimentConfig()
 
 
-def _discover_manifests(run_dir: Path) -> list[tuple[int, Any]]:
-    """Load every prepared ``mr*/manifest.json`` under ``run_dir``, sorted by manhattan radius."""
+def _discover_manifests(run_dir: Path) -> list[Any]:
+    """Load the run's prepared ``prepared/manifest.json`` (tolerating legacy ``mr*/`` run dirs)."""
     from tqec.orchestration import BatchManifest
 
-    found: list[tuple[int, Any]] = []
+    prepared = run_dir / "prepared" / "manifest.json"
+    if prepared.is_file():
+        return [BatchManifest.read(prepared)]
+    found: list[Any] = []
     for mdir in sorted(run_dir.glob("mr*")):
         manifest_path = mdir / "manifest.json"
         if manifest_path.is_file():
-            manifest = BatchManifest.read(manifest_path)
-            found.append((manifest.config.manhattan_radius, manifest))
-    found.sort(key=lambda rm: rm[0])
+            found.append(BatchManifest.read(manifest_path))
     return found
 
 
 def _score_and_render(
-    manifests: Sequence[tuple[int, Any]],
+    manifests: Sequence[Any],
     config: ExperimentConfig,
     out_dir: Path,
     *,
@@ -298,19 +292,17 @@ def _score_and_render(
     artifacts = out_dir / "artifacts"
     gadget_visuals: dict[str, dict[str, Any]] = {}
     rows: list[ExperimentRow] = []
-    work: list[tuple[Any, int, stim.Circuit, int, int]] = []
+    work: list[tuple[Any, int, stim.Circuit, int]] = []
     last_manifest = None
-    radii: list[int] = []
 
-    for radius, manifest in manifests:
+    for manifest in manifests:
         last_manifest = manifest
-        radii.append(radius)
         for unit in manifest.units:
             _ensure_gadget_visuals(
                 unit, manifest, gadget_visuals, artifacts, out_dir, log
             )
             if unit.status != "ready" or not unit.circuits:
-                rows.append(_prep_row(unit, radius))
+                rows.append(_prep_row(unit))
                 log.info(
                     "prep %s [%s] status=%s",
                     unit.gadget_id,
@@ -321,7 +313,7 @@ def _score_and_render(
             for k, rel in unit.circuits.items():
                 native = stim.Circuit.from_file(manifest.run_dir / rel)
                 for window in config.windows:
-                    work.append((unit, k, native, radius, window))
+                    work.append((unit, k, native, window))
 
     iterator: Any = work
     if show_progress:
@@ -332,19 +324,18 @@ def _score_and_render(
         except Exception:
             iterator = work
 
-    for unit, k, native, radius, window in iterator:
+    for unit, k, native, window in iterator:
         started = time.perf_counter()
         reannotated = annotate.reannotate(native, window=window)
-        row = _score(native, reannotated, unit, k, radius, window, config, oracles)
+        row = _score(native, reannotated, unit, k, window, config, oracles)
         row.runtime_s = time.perf_counter() - started
         _attach_visuals(row, native, reannotated, artifacts, out_dir)
         rows.append(row)
         log.info(
-            "score %s [%s] k=%s r=%s w=%s missing=%s dist=%s pass=%s",
+            "score %s [%s] k=%s w=%s missing=%s dist=%s pass=%s",
             unit.gadget_id,
             unit.convention,
             k,
-            radius,
             window,
             row.missing_parities,
             row.distance,
@@ -358,7 +349,6 @@ def _score_and_render(
             "conventions": list(config.conventions),
             "ks": list(config.ks),
             "windows": list(config.windows),
-            "manhattan_radii": radii,
             "oracles": [getattr(o, "name", str(o)) for o in oracles],
             "log": _relpath(log_path, out_dir),
         },
@@ -367,9 +357,7 @@ def _score_and_render(
     if config.simulation.enabled and last_manifest is not None:
         from tools.experiment import simulate
 
-        simulate.augment(
-            report, last_manifest, config, radius=radii[-1] if radii else None
-        )
+        simulate.augment(report, last_manifest, config)
 
     report.write(out_dir)
     log.info("wrote report to %s", out_dir)
@@ -391,7 +379,7 @@ def run_experiment(
     Args:
         inputs: a mix of ``.dae`` / ``.bgraph`` paths and in-memory ``BlockGraph`` objects, passed
             straight to ``tqec.orchestration.prepare_batch``.
-        config: experiment knobs (conventions, ks, windows, manhattan radii, predictors, oracles).
+        config: experiment knobs (conventions, ks, windows, predictors, oracles).
         out_dir: directory for the run artifacts and the report.
         oracles: optional user-supplied reference oracles (objects), compared up to logical
             symmetry; merged with any registered by name in ``config.oracles``. Ground truth is
@@ -407,26 +395,20 @@ def run_experiment(
     out_dir = Path(out_dir)
     log, log_path = runlog.make_logger(out_dir)
     log.info(
-        "start: conventions=%s ks=%s windows=%s manhattan_radii=%s inputs=%d",
+        "start: conventions=%s ks=%s windows=%s inputs=%d",
         config.conventions,
         config.ks,
         config.windows,
-        config.manhattan_radii,
         len(inputs),
     )
     _write_config(config, out_dir)
 
     active_oracles = [*oracles, *config.enabled_oracles()]
-    manifests: list[tuple[int, Any]] = []
-    for radius in config.manhattan_radii:
-        batch_config = config.to_batch_config(manhattan_radius=radius)
-        log.info("prepare_batch: manhattan_radius=%d", radius)
-        manifests.append(
-            (radius, prepare_batch(inputs, batch_config, out_dir / f"mr{radius}"))
-        )
+    log.info("prepare_batch")
+    manifest = prepare_batch(inputs, config.to_batch_config(), out_dir / "prepared")
 
     return _score_and_render(
-        manifests,
+        [manifest],
         config,
         out_dir,
         oracles=active_oracles,
@@ -445,8 +427,8 @@ def reannotate_run(
 ) -> ExperimentReport:
     """Re-annotate and re-score a run from its on-disk circuits--no recompile.
 
-    ``run_dir`` is an experiment output directory that still holds its ``mr*/manifest.json`` and
-    the circuits and graphs they reference. The native circuits are read off disk, re-annotated
+    ``run_dir`` is an experiment output directory that still holds its ``prepared/manifest.json``
+    and the circuits and graphs they reference. The native circuits are read off disk, re-annotated
     with ``tqecd``, scored, and written back out with fresh visuals and a fresh report. Use it to
     re-score with a different ``tqecd`` matching window / ``oracles`` / predictor selection, or
     against a different ``tqecd`` on the ``PYTHONPATH``, without paying for a recompile. To rebuild
@@ -458,8 +440,8 @@ def reannotate_run(
         overrides: config fields to override before re-scoring. Only knobs that do not require
             recompilation take effect (``windows``, ``predictors``, ``oracles``, ``noise_models``,
             ``ps``, ``expected_distance``, ``simulation``); ``ks`` / ``conventions`` /
-            ``manhattan_radii`` / ``logical_observables`` are baked into the prepared circuits and
-            are read back from the manifests on disk.
+            ``logical_observables`` are baked into the prepared circuits and are read back from the
+            manifests on disk.
         oracles: extra reference oracles, as in :func:`run_experiment`.
         show_progress: draw the progress bar and print the console summary.
 
@@ -477,15 +459,14 @@ def reannotate_run(
     manifests = _discover_manifests(run_dir)
     if not manifests:
         raise FileNotFoundError(
-            f"reannotate: no prepared circuits under {run_dir} (expected mr*/manifest.json). "
+            f"reannotate: no prepared circuits under {run_dir} (expected prepared/manifest.json). "
             "This run's circuits were cleaned up; re-run the experiment to regenerate them."
         )
 
     log, log_path = runlog.make_logger(run_dir, name="reannotate")
     log.info(
-        "reannotate: run_dir=%s radii=%s windows=%s predictors=%s",
+        "reannotate: run_dir=%s windows=%s predictors=%s",
         run_dir,
-        [r for r, _ in manifests],
         config.windows,
         config.predictors,
     )
@@ -537,7 +518,7 @@ def simulate_run(
 ) -> ExperimentReport:
     """Measure an existing run's prepared circuits under a (possibly different) noise model.
 
-    Reads the run's prepared ``mr*/manifest.json`` circuits and its ``report.json``, applies noise
+    Reads the run's prepared ``prepared/manifest.json`` circuits and its ``report.json``, applies noise
     with ``tqec.orchestration.simulate_batch`` (one flattened ``sinter.collect``), and attaches
     LER-vs-p plots (and Lambda factors) to the report--**without recompiling or re-annotating**.
     This is the standalone re-measure stage: build once, then sample under as many noise models as
@@ -580,12 +561,12 @@ def simulate_run(
     manifests = _discover_manifests(run_dir)
     if not manifests:
         raise FileNotFoundError(
-            f"simulate: no prepared circuits under {run_dir} (expected mr*/manifest.json). "
+            f"simulate: no prepared circuits under {run_dir} (expected prepared/manifest.json). "
             "This run's circuits were cleaned up; re-run the experiment to regenerate them."
         )
-    radius, manifest = manifests[-1]
+    manifest = manifests[-1]
     # point the manifest's generation config at the requested noise so simulate_batch measures it
-    manifest.config = config.to_batch_config(manhattan_radius=radius)
+    manifest.config = config.to_batch_config()
 
     report = ExperimentReport.from_json(report_path)
     # a re-measure replaces any earlier LER curves rather than keeping stale ones
@@ -597,13 +578,12 @@ def simulate_run(
 
     log, log_path = runlog.make_logger(run_dir, name="simulate")
     log.info(
-        "simulate: run_dir=%s radius=%s noise_models=%s ps=%s",
+        "simulate: run_dir=%s noise_models=%s ps=%s",
         run_dir,
-        radius,
         sim.noise_models,
         sim.ps,
     )
-    simulate_mod.augment(report, manifest, config, radius=radius)
+    simulate_mod.augment(report, manifest, config)
     report.write(run_dir)
     log.info("wrote report to %s", run_dir)
     if show_progress:

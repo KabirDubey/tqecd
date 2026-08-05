@@ -12,14 +12,14 @@ def _report() -> ExperimentReport:
         rows=[
             ExperimentRow(
                 gadget_id="g0", source="mem", name="cnot", convention="fixed_bulk",
-                k=1, manhattan_radius=2, window=2, status="ready", status_kind="pass",
+                k=1, window=2, status="ready", status_kind="pass",
                 missing_parities=0, parities_ok=True, distance=3, expected_distance=3,
                 distance_ok=True, predictors_pass=True, native_missing=0,
                 oracle_verdicts={"user_ref": {"equivalent": True}},
             ),
             ExperimentRow(
                 gadget_id="g1", source="mem", name="cnot", convention="fixed_bulk",
-                k=1, manhattan_radius=2, window=2, status="compile_failed", status_kind="prep_fail",
+                k=1, window=2, status="compile_failed", status_kind="prep_fail",
             ),
         ]
     )
@@ -64,7 +64,7 @@ def test_observable_and_failure_notes_render():
         rows=[
             ExperimentRow(
                 gadget_id="g", source="mem", name="cnot", convention="fixed_bulk",
-                k=2, manhattan_radius=2, window=2, status="ready",
+                k=2, window=2, status="ready",
                 status_kind="predictor_fail", missing_parities=0, parities_ok=True,
                 distance=1, expected_distance=5, distance_ok=False, predictors_pass=False,
                 observable="XXXI", notes="distance 1 != expected 5",

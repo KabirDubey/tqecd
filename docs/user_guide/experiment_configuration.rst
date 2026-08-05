@@ -22,11 +22,6 @@ Experiment options
     ``tqecd`` matching-window widths to sweep -- the ``tqecd`` knob under test, forwarded to
     ``annotate_detectors_automatically(window=...)``. Default ``(2,)``.
 
-``manhattan_radii``
-    ``tqec`` ``manhattan_radius`` values to sweep. The radius sizes the subtemplate window (side
-    ``2*r+1``) that ``tqec``'s native annotation searches; the tool runs one ``prepare_batch`` per
-    radius. Default ``(2,)``.
-
 ``logical_observables``
     How ``prepare_batch`` selects logical observables and fills open ports: ``"all"``,
     ``"all_possible"``, ``"area_minimized"`` or ``"random"``. Default ``"all"``.
@@ -91,7 +86,6 @@ TOML file format
     conventions = ["fixed_bulk", "fixed_boundary"]
     ks = [1, 2, 3]
     windows = [2]
-    manhattan_radii = [1, 2, 3]
     predictors = ["parities", "distance"]
 
     [experiment.simulation]

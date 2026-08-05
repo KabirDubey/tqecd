@@ -44,22 +44,22 @@ on-disk output and writes into the same run directory.
 - **run** persists the full config to `config.json` so later stages recover it.
 - **render** needs only `report.json` (rows already carry their `visuals`); it works even after the
   prepared circuits are cleaned.
-- **reannotate** re-applies `--windows` / `--oracles`; `--k` / `--conventions` /
-  `--manhattan-radii` are baked into the prepared circuits and are ignored with a notice. Pointing
-  `PYTHONPATH` at a different `tqecd` re-scores against that annotator on identical circuits.
+- **reannotate** re-applies `--windows` / `--oracles`; `--k` / `--conventions` are baked into the
+  prepared circuits and are ignored with a notice. Pointing `PYTHONPATH` at a different `tqecd`
+  re-scores against that annotator on identical circuits.
 - **simulate** re-measures under `--noise-models` / `--ps` on identical circuits, so a difference
   between two noise models is the noise model, not an accident of rebuilding.
 
 ## Config
 
-TOML (`[experiment]` table), lowered to a `tqec.orchestration.BatchConfig` per Manhattan radius:
-`conventions`, `ks`, `windows` (the tqecd knob under test), `manhattan_radii`,
+TOML (`[experiment]` table), lowered to a `tqec.orchestration.BatchConfig`:
+`conventions`, `ks`, `windows` (the tqecd knob under test),
 `logical_observables`, `predictors` (`parities`, `distance`), `oracles`, `noise_models`, `ps`,
 `expected_distance` (`2*k + 1`), `circuit_mode`, and an optional `[simulation]` block.
 
 ## Report
 
-One row per (gadget, convention, k, Manhattan radius, window). Every row records
+One row per (gadget, convention, k, window). Every row records
 `missing_parities`, `distance` vs `expected_distance`, `predictors_pass`, `runtime_s` (annotation +
 analysis wall time), and per-row debugging artifacts. A gadget `tqec` cannot compile yet is a
 non-ready row carried into the report, not a silent drop.
@@ -83,7 +83,7 @@ cubes, written to a PNG file and linked instead, so a large gadget never bloats 
   report.{json,html,txt,csv}  json is authoritative; html is the human view
   logs/<DDMMMYY_HHMM>_*.log    one per stage invocation
   artifacts/<gadget>/...       block_graph.html, per-cell annotated.stim / detector_free.stim
-  mr<radius>/                  prepared, noiseless circuits + manifest.json + graphs (from tqec)
+  prepared/                    prepared, noiseless circuits + manifest.json + graphs (from tqec)
 ```
 
 All artifact paths are stored relative to the run dir, so a run folder is portable.

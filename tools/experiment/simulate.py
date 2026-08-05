@@ -68,13 +68,12 @@ def _lambda_factor(points: dict[int, list[tuple[float, float]]]) -> float | None
 
 
 def augment(
-    report: ExperimentReport, manifest: Any, config: ExperimentConfig, *, radius: int | None = None
+    report: ExperimentReport, manifest: Any, config: ExperimentConfig
 ) -> ExperimentReport:
-    """Run ``simulate_batch`` and attach LER plots + Λ factors, matched by full identity.
+    """Run ``simulate_batch`` and attach LER plots + Λ factors, matched by ``(gadget, convention)``.
 
-    A curve belongs to a ``(gadget_id, convention)`` and is attached only to rows with that
-    identity and the simulated ``radius`` (the LER is independent of the tqecd window), so a
-    plot never lands beside the wrong parameter combination.
+    The LER is independent of the tqecd window, so a curve is attached to the first scored row of
+    its ``(gadget_id, convention)`` -- there is one prepared circuit set per gadget.
     """
     from tqec.orchestration import simulate_batch
 
@@ -102,13 +101,12 @@ def augment(
         title = f"{gadget_id} [{convention}]"
         plot = _plot_data_uri(points, title) if config.simulation.plot else None
         lam = _lambda_factor(points) if config.simulation.lambda_factor else None
-        # attach to the first row with this gadget, convention and simulated radius
+        # attach to the first scored row of this gadget + convention
         for row in report.rows:
             if (
                 row.gadget_id == gadget_id
                 and row.convention == convention
                 and row.k >= 0
-                and (radius is None or row.manhattan_radius == radius)
             ):
                 if plot is not None and row.ler_plot is None:
                     row.ler_plot = plot

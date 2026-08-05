@@ -70,7 +70,7 @@ Run from the command line:
     python -m tools.experiment --gallery all --k 1,2
 
     # from a config file
-    python -m tools.experiment --config tools/experiment/configs/manhattan_sensitivity.toml
+    python -m tools.experiment --config tools/experiment/configs/ler.toml
 
     # from a .dae / .bgraph file
     python -m tools.experiment --input my_gadget.dae --k 1,2,3
@@ -97,7 +97,7 @@ Re-using a run without recompiling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Every run persists its full config to ``<out>/config.json``, its prepared noiseless circuits under
-``<out>/mr<radius>/``, and the authoritative ``<out>/report.json``. You can reuse that on-disk data using either of following flags, where re-rendering is cheaper than re-annotating:
+``<out>/prepared/``, and the authoritative ``<out>/report.json``. You can reuse that on-disk data using either of following flags, where re-rendering is cheaper than re-annotating:
 
 ``--render <out>`` rebuilds ``report.html`` (and ``report.txt`` / ``report.csv``) from the existing
 ``report.json`` -- **UI only**. No circuits are read, no annotation runs, and no scores change; it
@@ -109,7 +109,7 @@ links resolve when the artifacts are still on disk).
 
     python -m tools.experiment --render out
 
-``--reannotate <out>`` reads the prepared ``mr<radius>/`` circuits back, re-annotates them with
+``--reannotate <out>`` reads the prepared ``prepared/`` circuits back, re-annotates them with
 ``tqecd``, re-scores, and rewrites the whole report with fresh visuals -- **without recompiling any
 circuit**. Use it to re-score at a different ``tqecd`` matching window, or against a different
 ``tqecd`` on the ``PYTHONPATH``, in a second or two rather than a full run:
@@ -122,11 +122,10 @@ circuit**. Use it to re-score at a different ``tqecd`` matching window, or again
     # re-score every prepared circuit at a different tqecd window
     python -m tools.experiment --reannotate out --windows 3
 
-For ``--reannotate``, ``--windows`` and ``--oracles`` are re-applied; ``--k`` / ``--conventions`` /
-``--manhattan-radii`` are baked into the prepared circuits and are ignored with a notice (re-run the
-experiment to change them). ``--reannotate`` needs the ``mr<radius>/`` circuits on disk -- if a run
-was cleaned down to just ``report.*``, ``--render`` still rebuilds the UI, but re-scoring needs a
-full re-run.
+For ``--reannotate``, ``--windows`` and ``--oracles`` are re-applied; ``--k`` / ``--conventions``
+are baked into the prepared circuits and are ignored with a notice (re-run the experiment to change
+them). ``--reannotate`` needs the ``prepared/`` circuits on disk -- if a run was cleaned down to
+just ``report.*``, ``--render`` still rebuilds the UI, but re-scoring needs a full re-run.
 
 .. dropdown:: Minimal example (click to expand)
 
@@ -163,7 +162,7 @@ Run a CNOT across both conventions and three code distances, then read the repor
 
 ``run_experiment`` writes four files into ``cnot_run/``:
 
-* ``report.json`` -- the full structured result (one row per gadget / convention / k / radius / window);
+* ``report.json`` -- the full structured result (one row per gadget / convention / k / window);
 * ``report.html`` -- a self-contained, sortable table (embedded LER plots when simulation runs);
 * ``report.txt`` -- the same table as plain text.
 
