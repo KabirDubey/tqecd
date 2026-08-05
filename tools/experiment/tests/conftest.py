@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import pytest
 
+# Import the tool first: its package-import side effect isolates tqec's detector-database cache
+# (sets TQEC_DETECTOR_DATABASE_PATH) before the importorskip below pulls tqec in.
+import tools.experiment  # noqa: F401,E402
+
 pytest.importorskip("tqec.orchestration", reason="experiment tests need the optional tqec dep")
 
 
