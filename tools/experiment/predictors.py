@@ -1,4 +1,4 @@
-"""Ground-truth-free *predictors* of fault tolerance (``stim`` + ``numpy``).
+"""Ground-truth-free *predictors* of fault tolerance (``stim`` + ``tqecd``).
 
 These are objective functions, not ground truth (see ``README.md``): they measure absolute
 properties of a single circuit without comparing it to any reference annotation.
@@ -9,68 +9,72 @@ properties of a single circuit without comparing it to any reference annotation.
   distance.
 * :func:`shortest_graphlike_error`--the code distance of the noisy circuit, compared to the
   expected ``2k + 1``.
+
+The GF(2) linear algebra is sourced from ``tqecd`` itself--:class:`tqecd.cover.BinaryVectorBasis`,
+the same incremental Gaussian-elimination primitive ``tqecd`` uses to reduce detector candidates.
+Measurement-record sets are encoded as arbitrary-precision integer bit-vectors (one bit per
+measurement), exactly as ``tqecd.window`` encodes them, so no separate matrix library is needed.
 """
 
 from __future__ import annotations
 
-import numpy as np
+from collections.abc import Iterable
+
 import stim
+
+from tqecd.cover import BinaryVectorBasis
 
 _MEASUREMENT_GATES = frozenset(
     {"M", "MR", "MX", "MY", "MZ", "MRX", "MRY", "MRZ", "MPP"}
 )
 
 
-def _gf2_rank(matrix: np.ndarray) -> int:
-    """Rank of a 0/1 matrix over GF(2) via Gaussian elimination."""
-    m = np.ascontiguousarray(matrix, dtype=np.uint8).copy()
-    rows, cols = m.shape
-    rank = 0
-    for col in range(cols):
-        pivot = next((r for r in range(rank, rows) if m[r, col]), None)
-        if pivot is None:
-            continue
-        m[[rank, pivot]] = m[[pivot, rank]]
-        mask = m[:, col].copy().astype(bool)
-        mask[rank] = False
-        m[mask] ^= m[rank]
-        rank += 1
-        if rank == rows:
-            break
-    return rank
+def _records_to_vector(indices: Iterable[int]) -> int:
+    """Encode absolute measurement-record indices as a GF(2) integer bit-vector."""
+    vector = 0
+    for index in indices:
+        vector ^= 1 << index
+    return vector
 
 
-def _emitted_subspace(circuit: stim.Circuit) -> np.ndarray:
-    """Indicator vectors (over measurement indices) of every ``DETECTOR`` and ``OBSERVABLE``."""
-    n = circuit.num_measurements
-    rows: list[np.ndarray] = []
+def _gf2_rank(vectors: Iterable[int]) -> int:
+    """Rank over GF(2) of integer bit-vectors, via ``tqecd``'s :class:`BinaryVectorBasis`.
+
+    Each vector added independently of the running basis increments the rank; ``BinaryVectorBasis``
+    is the same XOR-reduction primitive ``tqecd`` uses to keep only independent detector
+    candidates, so the predictor and the annotator share one notion of GF(2) independence.
+    """
+    basis = BinaryVectorBasis()
+    return sum(1 for vector in vectors if basis.add(vector))
+
+
+def _emitted_vectors(circuit: stim.Circuit) -> list[int]:
+    """Bit-vectors (over measurement records) of every ``DETECTOR`` and ``OBSERVABLE``."""
+    vectors: list[int] = []
     count = 0
     for instruction in circuit.flattened():
         name = instruction.name
         if name in _MEASUREMENT_GATES:
             count += instruction.num_measurements
         elif name in ("DETECTOR", "OBSERVABLE_INCLUDE"):
-            vector = np.zeros(n, dtype=np.uint8)
-            for target in instruction.targets_copy():
-                if target.is_measurement_record_target:
-                    vector[count + target.value] ^= 1
-            rows.append(vector)
-    return np.array(rows, dtype=np.uint8) if rows else np.zeros((0, n), dtype=np.uint8)
+            indices = [
+                count + target.value
+                for target in instruction.targets_copy()
+                if target.is_measurement_record_target
+            ]
+            vectors.append(_records_to_vector(indices))
+    return vectors
 
 
-def _complete_subspace(circuit: stim.Circuit) -> np.ndarray:
+def _complete_vectors(circuit: stim.Circuit) -> list[int]:
     """Complete deterministic measurement-parity space (flow generators with trivial in/out)."""
-    n = circuit.num_measurements
-    rows: list[np.ndarray] = []
+    vectors: list[int] = []
     for flow in circuit.flow_generators():
         if len(flow.input_copy()) == 0 and len(flow.output_copy()) == 0:
             indices = flow.measurements_copy()
             if indices:
-                vector = np.zeros(n, dtype=np.uint8)
-                for index in indices:
-                    vector[index] ^= 1
-                rows.append(vector)
-    return np.array(rows, dtype=np.uint8) if rows else np.zeros((0, n), dtype=np.uint8)
+                vectors.append(_records_to_vector(indices))
+    return vectors
 
 
 def count_missing_parities(circuit: stim.Circuit) -> int:
@@ -81,12 +85,12 @@ def count_missing_parities(circuit: stim.Circuit) -> int:
     over GF(2). Returns ``rank([E; C]) - rank(E)``: zero iff every deterministic parity is
     spanned by the emitted annotations, i.e. the annotation is complete.
     """
-    emitted = _emitted_subspace(circuit)
-    complete = _complete_subspace(circuit)
-    rank_e = _gf2_rank(emitted)
-    if complete.shape[0] == 0:
+    emitted = _emitted_vectors(circuit)
+    complete = _complete_vectors(circuit)
+    if not complete:
         return 0
-    rank_ec = _gf2_rank(np.vstack([emitted, complete]))
+    rank_e = _gf2_rank(emitted)
+    rank_ec = _gf2_rank([*emitted, *complete])
     return rank_ec - rank_e
 
 

@@ -1,12 +1,12 @@
-"""Unit tests for the ground-truth-free predictors (pure ``stim`` + ``numpy``, no ``tqec``)."""
+"""Unit tests for the ground-truth-free predictors (``stim`` + ``tqecd`` GF(2), no ``tqec``)."""
 
 from __future__ import annotations
 
-import numpy as np
 import stim
 
 from tools.experiment.predictors import (
     _gf2_rank,
+    _records_to_vector,
     count_missing_parities,
     describe_missing_parities,
     missing_parities,
@@ -15,12 +15,18 @@ from tools.experiment.predictors import (
 
 
 def test_gf2_rank_basic():
-    assert _gf2_rank(np.zeros((0, 3), np.uint8)) == 0
-    assert _gf2_rank(np.eye(3, dtype=np.uint8)) == 3
-    # two identical rows -> rank 1
-    assert _gf2_rank(np.array([[1, 1, 0], [1, 1, 0]], np.uint8)) == 1
-    # xor-dependent rows -> rank 2
-    assert _gf2_rank(np.array([[1, 0, 0], [0, 1, 0], [1, 1, 0]], np.uint8)) == 2
+    # Vectors are integer bit-masks over measurement records (tqecd's BinaryVectorBasis encoding).
+    assert _gf2_rank([]) == 0
+    assert _gf2_rank([_records_to_vector(s) for s in ([0], [1], [2])]) == 3
+    # two identical vectors -> rank 1
+    assert _gf2_rank([_records_to_vector([0, 1]), _records_to_vector([0, 1])]) == 1
+    # xor-dependent vectors ({0} ^ {1} = {0,1}) -> rank 2
+    assert (
+        _gf2_rank(
+            [_records_to_vector([0]), _records_to_vector([1]), _records_to_vector([0, 1])]
+        )
+        == 2
+    )
 
 
 def test_complete_annotation_has_no_missing_parities():

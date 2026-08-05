@@ -14,7 +14,7 @@ in here as either
 
 A reference is expected to share the gadget's logical action, so agreement is checked by
 **logical equivalence up to symmetry**: two annotations agree iff their ``DETECTOR`` /
-``OBSERVABLE`` parity subspaces span the same space over GF(2), not by byte-equality. Register an
+``OBSERVABLE`` parity subspaces span the same space over GF(2) (not by byte-equality). Register an
 oracle with :func:`register_oracle` (resolved by name from config) or pass oracle objects straight
 to :func:`tools.experiment.core.run_experiment`.
 
@@ -28,13 +28,13 @@ selects it by name (``oracles = ["native"]`` in a config, or ``--oracles native`
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-import numpy as np
 import stim
 
-from tools.experiment.predictors import _emitted_subspace, _gf2_rank
+from tools.experiment.predictors import _emitted_vectors, _gf2_rank
 
 if TYPE_CHECKING:
     from tools.experiment.config import ExperimentConfig
@@ -65,18 +65,20 @@ class OracleVerdict:
 
 def logically_equivalent(a: stim.Circuit, b: stim.Circuit) -> bool:
     """``True`` iff the two circuits' emitted annotation subspaces span the same GF(2) space."""
-    ea = _emitted_subspace(a)
-    eb = _emitted_subspace(b)
-    if ea.shape[1] != eb.shape[1]:
+    if a.num_measurements != b.num_measurements:
         # Different measurement counts -> not comparable at the record level.
         return False
+    ea = _emitted_vectors(a)
+    eb = _emitted_vectors(b)
     ra = _gf2_rank(ea)
     rb = _gf2_rank(eb)
-    rab = _gf2_rank(np.vstack([ea, eb])) if ea.size or eb.size else 0
+    rab = _gf2_rank([*ea, *eb])
     return ra == rb == rab
 
 
-def _verdict(name: str, reannotated: stim.Circuit, reference: stim.Circuit) -> OracleVerdict:
+def _verdict(
+    name: str, reannotated: stim.Circuit, reference: stim.Circuit
+) -> OracleVerdict:
     equivalent = logically_equivalent(reannotated, reference)
     detail = (
         "logically equivalent to reference"
@@ -92,17 +94,19 @@ class Oracle(Protocol):
 
     name: str
 
-    def applies(self, unit: object, config: "ExperimentConfig") -> bool:
+    def applies(self, unit: object, config: ExperimentConfig) -> bool:
         """Whether this oracle is a valid ground truth for ``unit`` under ``config``."""
 
     def reference(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
         """The known-correct circuit to compare against."""
 
-    def compare(self, reannotated: stim.Circuit, reference: stim.Circuit) -> OracleVerdict:
+    def compare(
+        self, reannotated: stim.Circuit, reference: stim.Circuit
+    ) -> OracleVerdict:
         """Compare a re-annotated circuit to the reference, up to logical symmetry."""
 
 
-def _always(unit: object, config: "ExperimentConfig") -> bool:
+def _always(unit: object, config: ExperimentConfig) -> bool:
     return True
 
 
@@ -118,13 +122,15 @@ class CircuitOracle:
     reference_circuit: stim.Circuit
     applies_to: AppliesPredicate = _always
 
-    def applies(self, unit: object, config: "ExperimentConfig") -> bool:
+    def applies(self, unit: object, config: ExperimentConfig) -> bool:
         return self.applies_to(unit, config)
 
     def reference(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
         return self.reference_circuit
 
-    def compare(self, reannotated: stim.Circuit, reference: stim.Circuit) -> OracleVerdict:
+    def compare(
+        self, reannotated: stim.Circuit, reference: stim.Circuit
+    ) -> OracleVerdict:
         return _verdict(self.name, reannotated, reference)
 
 
@@ -140,13 +146,15 @@ class CallableOracle:
     emit: ReferenceEmitter
     applies_to: AppliesPredicate = _always
 
-    def applies(self, unit: object, config: "ExperimentConfig") -> bool:
+    def applies(self, unit: object, config: ExperimentConfig) -> bool:
         return self.applies_to(unit, config)
 
     def reference(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
         return self.emit(unit, k, native)
 
-    def compare(self, reannotated: stim.Circuit, reference: stim.Circuit) -> OracleVerdict:
+    def compare(
+        self, reannotated: stim.Circuit, reference: stim.Circuit
+    ) -> OracleVerdict:
         return _verdict(self.name, reannotated, reference)
 
 
@@ -189,12 +197,14 @@ def _native_reference(unit: object, k: int, native: stim.Circuit) -> stim.Circui
     return native
 
 
-def _is_fixed_bulk(unit: object, config: "ExperimentConfig") -> bool:
+def _is_fixed_bulk(unit: object, config: ExperimentConfig) -> bool:
     """native is a reliable reference only for the ``fixed_bulk`` convention."""
     return getattr(unit, "convention", "") == "fixed_bulk"
 
 
 #: Built-in oracle: tqec's native ``fixed_bulk`` annotation as ground truth for the
 #: ``annotate_detectors_automatically`` reannotation under test. Opt in with ``oracles=["native"]``.
-NATIVE_ORACLE = CallableOracle(name="native", emit=_native_reference, applies_to=_is_fixed_bulk)
+NATIVE_ORACLE = CallableOracle(
+    name="native", emit=_native_reference, applies_to=_is_fixed_bulk
+)
 register_oracle(NATIVE_ORACLE)
