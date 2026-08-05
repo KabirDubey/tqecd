@@ -14,8 +14,8 @@ def _report() -> ExperimentReport:
                 gadget_id="g0", source="mem", name="cnot", convention="fixed_bulk",
                 k=1, window=2, status="ready", status_kind="pass",
                 missing_parities=0, parities_ok=True, distance=3, expected_distance=3,
-                distance_ok=True, predictors_pass=True, native_missing=0,
-                oracle_verdicts={"user_ref": {"equivalent": True}},
+                distance_ok=True, predictors_pass=True,
+                oracle_results={"user_ref": {"equivalent": True, "distance": 3}},
             ),
             ExperimentRow(
                 gadget_id="g1", source="mem", name="cnot", convention="fixed_bulk",

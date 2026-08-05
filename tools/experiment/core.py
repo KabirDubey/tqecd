@@ -19,7 +19,7 @@ from typing import Any
 
 import stim
 
-from tools.experiment import annotate, predictors, runlog, visuals
+from tools.experiment import annotators, predictors, runlog, visuals
 from tools.experiment.config import ExperimentConfig
 from tools.experiment.report import (
     NOT_SCORED,
@@ -79,7 +79,6 @@ def _score(
     k: int,
     window: int,
     config: ExperimentConfig,
-    oracles: Sequence[Any],
 ) -> ExperimentRow:
     row = ExperimentRow(
         gadget_id=unit.gadget_id,
@@ -95,7 +94,6 @@ def _score(
     if config.run_parities:
         row.missing_parities = predictors.count_missing_parities(reannotated)
         row.parities_ok = row.missing_parities == 0
-        row.native_missing = predictors.count_missing_parities(native)
 
     if config.run_distance:
         row.expected_distance = _expected_distance(config.expected_distance, k)
@@ -109,12 +107,52 @@ def _score(
     if row.predictors_pass is False:
         row.notes = _failure_reason(row)
 
-    for oracle in oracles:
-        if oracle.applies(unit, config):
-            verdict = oracle.compare(reannotated, oracle.reference(unit, k, native))
-            row.oracle_verdicts[oracle.name] = verdict.to_dict()
-
     return row
+
+
+def _score_oracles(
+    row: ExperimentRow,
+    reannotated: stim.Circuit,
+    unit: Any,
+    k: int,
+    native: stim.Circuit,
+    config: ExperimentConfig,
+    oracles: Sequence[Any],
+    artifacts: Path,
+    out_dir: Path,
+) -> None:
+    """Score every applicable oracle as an alternate annotator, side by side with the experimental.
+
+    Each oracle produces an alternate annotation; it is scored on the *same* metric (distance vs
+    ``2k+1`` and missing parities), checked for logical equivalence to the experimental circuit,
+    and its ``.stim`` written for a report link. Results land in ``row.oracle_results[name]``.
+    """
+    from tools.experiment.oracle import logically_equivalent
+
+    for oracle in oracles:
+        if not oracle.applies(unit, config):
+            continue
+        name = oracle.name
+        try:
+            circuit = oracle.annotate(unit, k, native)
+        except Exception as exc:  # a missing worktree / subprocess failure is recorded, not fatal
+            row.oracle_results[name] = {"error": str(exc)[:200]}
+            continue
+        res: dict[str, Any] = {"equivalent": logically_equivalent(reannotated, circuit)}
+        if config.run_parities:
+            res["missing_parities"] = predictors.count_missing_parities(circuit)
+        if config.run_distance:
+            noisy = _noisy(circuit, config.noise_models[0], config.ps[0])
+            distance = predictors.shortest_graphlike_error(noisy)
+            res["distance"] = distance
+            res["distance_ok"] = distance == row.expected_distance
+        cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}_w{row.window}"
+        try:
+            path = visuals.write_circuit(circuit, cell / f"oracle_{name}.stim")
+            res["stim"] = _relpath(path, out_dir)
+        except Exception:
+            pass
+        row.oracle_results[name] = res
 
 
 def _prep_row(unit: Any) -> ExperimentRow:
@@ -229,7 +267,7 @@ def _attach_visuals(
         v["circuit"] = _relpath(
             visuals.write_circuit(reannotated, cell / "annotated.stim"), out_dir
         )
-        detector_free = annotate.strip_annotations(native)
+        detector_free = annotators.strip_annotations(native)
         v["detector_free"] = _relpath(
             visuals.write_circuit(detector_free, cell / "detector_free.stim"), out_dir
         )
@@ -326,9 +364,10 @@ def _score_and_render(
 
     for unit, k, native, window in iterator:
         started = time.perf_counter()
-        reannotated = annotate.reannotate(native, window=window)
-        row = _score(native, reannotated, unit, k, window, config, oracles)
+        reannotated = annotators.reannotate(native, window=window)
+        row = _score(native, reannotated, unit, k, window, config)
         row.runtime_s = time.perf_counter() - started
+        _score_oracles(row, reannotated, unit, k, native, config, oracles, artifacts, out_dir)
         _attach_visuals(row, native, reannotated, artifacts, out_dir)
         rows.append(row)
         log.info(

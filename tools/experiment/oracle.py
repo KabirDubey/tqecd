@@ -1,31 +1,22 @@
-"""Reference *oracles*--optional, user-supplied ground truth (``stim`` + ``numpy``).
+"""Reference *oracles*--alternate annotators to compare the experimental one against.
 
-The general case has **no ground truth**: for an arbitrary gadget it is often unknown whether any
-detector annotation reaches full distance, and ``tqec``'s own native ``fixed_bulk`` annotation is
-*not* a reliable reference for most gadgets. So this module ships **no** default oracle, and an
-experiment need not use one at all.
+The experimental subject is ``tqecd``'s windowed ``annotate_detectors_automatically``
+(:func:`tools.experiment.annotators.reannotate`). An **oracle is another annotator** producing an
+alternate annotation of the same gadget; the report scores each oracle on the *same* metric as the
+experimental one (distance vs ``2k+1``) and additionally checks logical equivalence to it, so the
+annotators sit side by side. Oracles are opt-in: none run unless a run selects them.
 
-Oracles are entirely opt-in. A user who does have a known-correct reference for a gadget wires it
-in here as either
+Two oracles ship built in:
 
-* a fixed annotated ``stim.Circuit`` (:class:`CircuitOracle`), or
-* a callable that emits one per ``(unit, k, native)`` (:class:`CallableOracle`) -- e.g. a method
-  that synthesises a differently-built circuit with the *same macroscopic behavior*.
+* ``native`` -- ``tqec``'s own native annotation (the circuit ``prepare_batch`` wrote), a valid
+  same-behavior reference wherever ``tqec`` could compile the gadget (every convention).
+* ``tqecd_main`` -- the main-branch (windowless) ``tqecd`` ``annotate_detectors_automatically``,
+  run out-of-process (see :mod:`tools.experiment.annotators`); it isolates the effect of windowing.
+  It applies only when the main-branch worktree is available.
 
-A reference is expected to share the gadget's logical action, so agreement is checked by
-**logical equivalence up to symmetry**: two annotations agree iff their ``DETECTOR`` /
-``OBSERVABLE`` parity subspaces span the same space over GF(2) (not by byte-equality). Register an
-oracle with :func:`register_oracle` (resolved by name from config) or pass oracle objects straight
-to :func:`tools.experiment.core.run_experiment`.
-
-One built-in oracle ships registered: :data:`NATIVE_ORACLE`, named ``"native"``. It uses ``tqec``'s
-own native annotation (the subtemplate route in ``tqec.compile.detectors.compute``) as the ground
-truth for the ``tqecd.annotate_detectors_automatically`` reannotation under test. It applies to
-**every convention** -- the native annotation is the circuit ``prepare_batch`` wrote, so it is a
-valid same-behavior reference wherever ``tqec`` could compile the gadget. It is still opt-in --
-nothing runs it unless a run selects it by name (``oracles = ["native"]`` in a config, or
-``--oracles native`` on the CLI). It reports logical equivalence only; a run can still pass its
-predictors while the reannotation differs from native (they are complementary signals).
+Users can add their own: a fixed annotated circuit (:class:`CircuitOracle`) or a callable emitting
+one per ``(unit, k, native)`` (:class:`CallableOracle`). Equivalence is checked up to logical
+symmetry -- the ``DETECTOR`` / ``OBSERVABLE`` parity subspaces must span the same GF(2) space.
 """
 
 from __future__ import annotations
@@ -36,33 +27,16 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import stim
 
+from tools.experiment import annotators
 from tools.experiment.predictors import _emitted_vectors, _gf2_rank
 
 if TYPE_CHECKING:
     from tools.experiment.config import ExperimentConfig
 
-#: A callable emitting the reference annotated circuit for one prepared unit.
+#: A callable emitting the alternate annotated circuit for one prepared unit.
 ReferenceEmitter = Callable[[object, int, stim.Circuit], stim.Circuit]
 #: A predicate deciding whether an oracle is a valid reference for a given unit.
 AppliesPredicate = Callable[[object, "ExperimentConfig"], bool]
-
-
-@dataclass(frozen=True)
-class OracleVerdict:
-    """Outcome of comparing a re-annotated circuit to an oracle reference."""
-
-    oracle: str
-    applies: bool
-    equivalent: bool
-    detail: str
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "oracle": self.oracle,
-            "applies": self.applies,
-            "equivalent": self.equivalent,
-            "detail": self.detail,
-        }
 
 
 def logically_equivalent(a: stim.Circuit, b: stim.Circuit) -> bool:
@@ -78,34 +52,17 @@ def logically_equivalent(a: stim.Circuit, b: stim.Circuit) -> bool:
     return ra == rb == rab
 
 
-def _verdict(
-    name: str, reannotated: stim.Circuit, reference: stim.Circuit
-) -> OracleVerdict:
-    equivalent = logically_equivalent(reannotated, reference)
-    detail = (
-        "logically equivalent to reference"
-        if equivalent
-        else "NOT logically equivalent to reference"
-    )
-    return OracleVerdict(name, applies=True, equivalent=equivalent, detail=detail)
-
-
 @runtime_checkable
 class Oracle(Protocol):
-    """A user-supplied known-correct reference, valid only where :meth:`applies` says so."""
+    """An alternate annotator, valid only where :meth:`applies` says so."""
 
     name: str
 
     def applies(self, unit: object, config: ExperimentConfig) -> bool:
-        """Whether this oracle is a valid ground truth for ``unit`` under ``config``."""
+        """Whether this oracle can annotate ``unit`` under ``config``."""
 
-    def reference(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
-        """The known-correct circuit to compare against."""
-
-    def compare(
-        self, reannotated: stim.Circuit, reference: stim.Circuit
-    ) -> OracleVerdict:
-        """Compare a re-annotated circuit to the reference, up to logical symmetry."""
+    def annotate(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
+        """The oracle's alternate annotation, scored side by side with the experimental one."""
 
 
 def _always(unit: object, config: ExperimentConfig) -> bool:
@@ -114,11 +71,7 @@ def _always(unit: object, config: ExperimentConfig) -> bool:
 
 @dataclass(frozen=True)
 class CircuitOracle:
-    """A fixed, user-supplied annotated reference circuit.
-
-    Use when the same known-correct circuit is the reference for every prepared unit the oracle
-    applies to (constrain that set with ``applies_to``).
-    """
+    """A fixed, user-supplied annotated reference circuit (same one for every unit it applies to)."""
 
     name: str
     reference_circuit: stim.Circuit
@@ -127,22 +80,13 @@ class CircuitOracle:
     def applies(self, unit: object, config: ExperimentConfig) -> bool:
         return self.applies_to(unit, config)
 
-    def reference(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
+    def annotate(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
         return self.reference_circuit
-
-    def compare(
-        self, reannotated: stim.Circuit, reference: stim.Circuit
-    ) -> OracleVerdict:
-        return _verdict(self.name, reannotated, reference)
 
 
 @dataclass(frozen=True)
 class CallableOracle:
-    """A user-supplied callable emitting the reference annotated circuit per ``(unit, k, native)``.
-
-    The callable may synthesise a differently-built circuit with the same macroscopic behavior, or
-    return an externally-annotated circuit loaded from disk--anything ``stim`` can represent.
-    """
+    """A user-supplied callable emitting the alternate annotation per ``(unit, k, native)``."""
 
     name: str
     emit: ReferenceEmitter
@@ -151,17 +95,11 @@ class CallableOracle:
     def applies(self, unit: object, config: ExperimentConfig) -> bool:
         return self.applies_to(unit, config)
 
-    def reference(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
+    def annotate(self, unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
         return self.emit(unit, k, native)
 
-    def compare(
-        self, reannotated: stim.Circuit, reference: stim.Circuit
-    ) -> OracleVerdict:
-        return _verdict(self.name, reannotated, reference)
 
-
-# The registry is EMPTY by default: no annotation is treated as ground truth unless a user
-# explicitly registers a reference (or passes oracle objects straight to run_experiment).
+# The registry holds the built-in annotator oracles below plus anything a user registers.
 _REGISTRY: dict[str, Oracle] = {}
 
 
@@ -194,13 +132,22 @@ def available_oracles() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def _native_reference(unit: object, k: int, native: stim.Circuit) -> stim.Circuit:
-    """Reference emitter for the built-in native oracle: tqec's own native annotation."""
-    return native
+def _main_available(unit: object, config: ExperimentConfig) -> bool:
+    """The windowless oracle applies only when the main-branch tqecd worktree is present."""
+    return annotators.main_branch_src() is not None
 
 
-#: Built-in oracle: tqec's native annotation (whatever convention the gadget compiled under) as a
-#: same-behavior reference for the ``annotate_detectors_automatically`` reannotation under test.
-#: Applies to every convention. Opt in with ``oracles=["native"]``.
-NATIVE_ORACLE = CallableOracle(name="native", emit=_native_reference, applies_to=_always)
+#: Built-in oracle: tqec's native annotation (the circuit ``prepare_batch`` wrote), every convention.
+NATIVE_ORACLE = CallableOracle(
+    name="native",
+    emit=lambda unit, k, native: annotators.native_annotation(native),
+    applies_to=_always,
+)
+#: Built-in oracle: main-branch (windowless) tqecd, run out-of-process. Isolates the windowing pass.
+MAIN_ORACLE = CallableOracle(
+    name="tqecd_main",
+    emit=lambda unit, k, native: annotators.main_branch_reannotation(native),
+    applies_to=_main_available,
+)
 register_oracle(NATIVE_ORACLE)
+register_oracle(MAIN_ORACLE)

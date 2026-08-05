@@ -31,7 +31,7 @@ from tqec.utils.enums import Basis
 
 import stim
 
-from tools.experiment import annotate
+from tools.experiment import annotators
 from tools.experiment.predictors import count_missing_parities
 
 
@@ -60,7 +60,7 @@ def test_reannotate_real_gadget(out_dir):
     )
     unit = manifest.units[0]
     native = stim.Circuit.from_file(manifest.run_dir / unit.circuits[1])
-    reannotated = annotate.reannotate(native, window=2)
+    reannotated = annotators.reannotate(native, window=2)
     assert reannotated.num_observables == native.num_observables
     assert reannotated.num_measurements == native.num_measurements
     assert count_missing_parities(reannotated) == 0
@@ -99,8 +99,8 @@ def test_across_conventions_with_user_oracle(out_dir):
     ready = _assert_all_ready_pass(report)
     by_conv = {r.convention: r for r in ready}
     assert set(by_conv) == {"fixed_bulk", "fixed_boundary"}
-    assert by_conv["fixed_bulk"].oracle_verdicts["user_native_fixed_bulk"]["equivalent"] is True
-    assert by_conv["fixed_boundary"].oracle_verdicts == {}
+    assert by_conv["fixed_bulk"].oracle_results["user_native_fixed_bulk"]["equivalent"] is True
+    assert by_conv["fixed_boundary"].oracle_results == {}
 
 
 # Two disjoint CNOTs in one input, swept over k

@@ -111,7 +111,7 @@ def probe(label: str, out_json: str) -> None:
     from tqec.utils.exceptions import TQECError
     from tqec.utils.noise_model import NoiseModel
 
-    from tools.experiment import annotate
+    from tools.experiment import annotators as annotate
     from tools.experiment.predictors import count_missing_parities, shortest_graphlike_error
 
     # A fresh in-memory database so a stale on-disk pickle (a version that moved a class) is never

@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 import stim
 
-from tools.experiment.annotate import strip_annotations
+from tools.experiment.annotators import strip_annotations
 from tools.experiment.oracle import CallableOracle, CircuitOracle, logically_equivalent
 
 CIRCUITS = Path(__file__).parent / "test_circuits"
@@ -34,8 +34,8 @@ def test_oracle_guard_sliding(name: str) -> None:
     circuit = _load(name)
     assert circuit.num_detectors > 0
     oracle = CircuitOracle(name, circuit)
-    verdict = oracle.compare(circuit, oracle.reference(unit=None, k=1, native=circuit))
-    assert verdict.applies and verdict.equivalent
+    assert oracle.applies(unit=None, config=None)
+    assert logically_equivalent(circuit, oracle.annotate(unit=None, k=1, native=circuit))
     assert logically_equivalent(circuit, circuit)
     # the guard rejects an annotation that dropped its detectors/observables
     assert not logically_equivalent(circuit, strip_annotations(circuit))
@@ -48,6 +48,5 @@ def test_oracle_guard_ybasis(name: str) -> None:
     assert "RY" in text or "MY" in text  # genuinely a Y-basis circuit
     assert circuit.num_detectors > 0
     oracle = CallableOracle(name, emit=lambda unit, k, native: native)
-    verdict = oracle.compare(circuit, oracle.reference(unit=None, k=1, native=circuit))
-    assert verdict.equivalent
+    assert logically_equivalent(circuit, oracle.annotate(unit=None, k=1, native=circuit))
     assert not logically_equivalent(circuit, strip_annotations(circuit))

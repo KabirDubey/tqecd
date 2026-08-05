@@ -56,9 +56,8 @@ _COL_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("missing", "Missing parities", True),
     ("distance", "Distance", True),
     ("expected", "Expected", False),
-    ("native", "Native missing", False),
     ("lambda", "Lambda", False),
-    ("runtime", "Runtime (s)", False),
+    ("runtime", "Runtime (s)", True),
     ("links", "Links", True),
     ("notes", "Notes", True),
     ("source", "Source", False),
@@ -85,9 +84,8 @@ class ExperimentRow:
     expected_distance: int | None = None
     distance_ok: bool | None = None
     predictors_pass: bool | None = None
-    native_missing: int | None = None
     observable: str = ""
-    oracle_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    oracle_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     visuals: dict[str, Any] = field(default_factory=dict)
     ler_plot: str | None = None
     lambda_factor: float | None = None
@@ -246,7 +244,6 @@ class ExperimentReport:
             _num_td(r.missing_parities, "missing"),
             _num_td(r.distance, "distance"),
             _num_td(r.expected_distance, "expected"),
-            _num_td(r.native_missing, "native"),
             _num_td(r.lambda_factor, "lambda"),
             _num_td(r.runtime_s, "runtime"),
             self._links_cell(r),
@@ -286,12 +283,12 @@ class ExperimentReport:
 
     def _detail_html(self, r: ExperimentRow, gv: dict[str, Any]) -> str:
         parts: list[str] = []
-        if r.oracle_verdicts:
+        if r.oracle_results:
             items = "".join(
                 f"<li>{html.escape(name)}: "
-                f"{'equivalent' if v.get('equivalent') else 'not equivalent'}"
-                f" &mdash; {html.escape(str(v.get('detail', '')))}</li>"
-                for name, v in r.oracle_verdicts.items()
+                f"distance {v.get('distance')} · "
+                f"{'equivalent' if v.get('equivalent') else 'not equivalent'}</li>"
+                for name, v in r.oracle_results.items()
             )
             parts.append(f"<div><b>oracles</b><ul>{items}</ul></div>")
 
@@ -326,8 +323,7 @@ class ExperimentReport:
         labels = {key: label for key, label, _ in _COL_SPECS}
         idx = {key: i for i, (key, _, _) in enumerate(_COL_SPECS)}
         numeric = {
-            "k", "window", "missing", "distance",
-            "expected", "native", "lambda", "runtime",
+            "k", "window", "missing", "distance", "expected", "lambda", "runtime",
         }
         unsortable = {"block_graph", "zx", "links"}
 
