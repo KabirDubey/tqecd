@@ -119,6 +119,31 @@ def _relpath(path: Path, out_dir: Path) -> str:
     return os.path.relpath(path, out_dir)
 
 
+def _select_observable_surface(graph: Any, unit: Any) -> Any:
+    """Pick the correlation surface of the observable this unit simulates (else the first).
+
+    ``prepare_batch`` records each simulated observable's external stabilizer on the unit; this
+    matches it back to a live ``CorrelationSurface`` so the ZX and 3D pictures decorate the *same*
+    observable that is being scored, not an arbitrary one.
+    """
+    try:
+        surfaces = graph.find_correlation_surfaces()
+    except Exception:
+        return None
+    if not surfaces:
+        return None
+    observables = getattr(unit, "logical_observables", ()) or ()
+    wanted = getattr(observables[0], "external_stabilizer", "") if observables else ""
+    if wanted:
+        for surface in surfaces:
+            try:
+                if surface.external_stabilizer_on_graph(graph) == wanted:
+                    return surface
+            except Exception:
+                continue
+    return surfaces[0]
+
+
 def _ensure_gadget_visuals(
     unit: Any,
     manifest: Any,
@@ -127,7 +152,12 @@ def _ensure_gadget_visuals(
     out_dir: Path,
     log,
 ) -> None:
-    """Compute the per-gadget structure pictures once (positioned ZX + block-graph observable surface)."""
+    """Compute the per-gadget structure pictures once (positioned ZX + 3D block graph).
+
+    Both pictures are decorated with the correlation surface of the observable being simulated:
+    the ZX diagram overlays its Pauli web, and the 3D block graph shows the surface with its ``-Y``
+    faces popped so it is visible inside the model.
+    """
     gid = unit.gadget_id
     if gid in gadget_visuals or not getattr(unit, "graph", None):
         return
@@ -136,11 +166,7 @@ def _ensure_gadget_visuals(
     if graph is None:
         log.info("gadget visuals: could not load graph for %s", gid)
         return
-    try:
-        surfaces = graph.find_correlation_surfaces()
-        surface = surfaces[0] if surfaces else None
-    except Exception:
-        surface = None
+    surface = _select_observable_surface(graph, unit)
     # Positioned ZX: inline for small graphs, linked to a PNG file for large ones so a big gadget
     # never bloats the single-file report.
     try:
@@ -149,12 +175,12 @@ def _ensure_gadget_visuals(
         n_nodes = 0
     if n_nodes > visuals.ZX_INLINE_MAX_NODES:
         written_zx = visuals.write_positioned_zx_png(
-            graph, artifacts / gid / "positioned_zx.png", title=gid
+            graph, artifacts / gid / "positioned_zx.png", title=gid, surface=surface
         )
         if written_zx:
             gadget_visuals[gid]["zx_link"] = _relpath(written_zx, out_dir)
     else:
-        zx = visuals.positioned_zx_png_data_uri(graph, title=gid)
+        zx = visuals.positioned_zx_png_data_uri(graph, title=gid, surface=surface)
         if zx:
             gadget_visuals[gid]["zx_png"] = zx
     # The 3D block-graph viewer is written for every gadget (including pipeless single-cube ones),

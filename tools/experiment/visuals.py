@@ -72,20 +72,34 @@ def write_circuit(circuit: stim.Circuit, path: Path) -> Path:
     return path
 
 
-def write_block_graph_html(graph, path: Path, correlation_surface=None) -> Path | None:
-    """Write ``BlockGraph.view_as_html`` (optionally showing a the logical observable surface) and return the path."""
+def write_block_graph_html(
+    graph, path: Path, correlation_surface=None, *, pop_faces=("-Y",)
+) -> Path | None:
+    """Write ``BlockGraph.view_as_html`` and return the path.
+
+    When ``correlation_surface`` is the observable being simulated, the ``-Y`` faces are popped so
+    the surface is visible inside the 3D model (the convention used across ``tqec``'s own gallery
+    notebooks). Popping is skipped when there is no surface to reveal.
+    """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         graph.view_as_html(
-            write_html_filepath=str(path), show_correlation_surface=correlation_surface
+            write_html_filepath=str(path),
+            show_correlation_surface=correlation_surface,
+            pop_faces_at_directions=pop_faces if correlation_surface is not None else (),
         )
         return path
     except Exception:
         return None
 
 
-def _render_zx_png(graph, title: str | None) -> bytes | None:
-    """Render the block graph's positioned ZX diagram to PNG bytes, or ``None`` on failure."""
+def _render_zx_png(graph, title: str | None, surface=None) -> bytes | None:
+    """Render the positioned ZX diagram to PNG bytes, decorated with ``surface`` if given.
+
+    When ``surface`` is the correlation surface of the observable being simulated, it is drawn
+    over the ZX graph with ``tqec``'s own ``draw_correlation_surface_on`` so the Pauli web of the
+    logical observable is visible on the picture. Returns ``None`` on any failure.
+    """
     try:
         import io
 
@@ -93,12 +107,20 @@ def _render_zx_png(graph, title: str | None) -> bytes | None:
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        from tqec.interop.pyzx import plot_positioned_zx_graph
+        from tqec.interop.pyzx.plot import (
+            draw_correlation_surface_on,
+            plot_positioned_zx_graph,
+        )
     except Exception:
         return None
     try:
         zx = graph.to_zx_graph()
-        fig, _ = plot_positioned_zx_graph(zx, title=title, figsize=(4.0, 4.5))
+        fig, ax = plot_positioned_zx_graph(zx, title=title, figsize=(4.0, 4.5))
+        if surface is not None:
+            try:
+                draw_correlation_surface_on(surface, zx, ax)
+            except Exception:
+                pass
         buffer = io.BytesIO()
         fig.savefig(buffer, format="png", dpi=110, bbox_inches="tight")
         plt.close(fig)
@@ -107,21 +129,23 @@ def _render_zx_png(graph, title: str | None) -> bytes | None:
         return None
 
 
-def positioned_zx_png_data_uri(graph, *, title: str | None = None) -> str | None:
-    """Render the block graph's positioned ZX diagram as a base64 PNG ``data:`` URI (inline)."""
+def positioned_zx_png_data_uri(
+    graph, *, title: str | None = None, surface=None
+) -> str | None:
+    """Render the positioned ZX diagram (decorated with ``surface``) as a base64 PNG ``data:`` URI."""
     import base64
 
-    png = _render_zx_png(graph, title)
+    png = _render_zx_png(graph, title, surface)
     if png is None:
         return None
     return f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}"
 
 
 def write_positioned_zx_png(
-    graph, path: Path, *, title: str | None = None
+    graph, path: Path, *, title: str | None = None, surface=None
 ) -> Path | None:
-    """Write the positioned ZX diagram to a PNG file and return the path (for large graphs)."""
-    png = _render_zx_png(graph, title)
+    """Write the positioned ZX diagram (decorated with ``surface``) to a PNG file; return the path."""
+    png = _render_zx_png(graph, title, surface)
     if png is None:
         return None
     path.parent.mkdir(parents=True, exist_ok=True)
