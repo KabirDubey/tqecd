@@ -102,7 +102,7 @@ Re-using a run without recompiling
 Every run persists its full config to ``<out>/config.json``, its prepared noiseless circuits under
 ``<out>/prepared/``, and the authoritative ``<out>/report.json``. You can reuse that on-disk data using either of following flags, where re-rendering is cheaper than re-annotating:
 
-``--render <out>`` rebuilds ``report.html`` (and ``report.txt`` / ``report.csv``) from the existing
+``--render <out>`` rebuilds ``report.html`` (and ``report.txt``) from the existing
 ``report.json`` -- **UI only**. No circuits are read, no annotation runs, and no scores change; it
 runs no ``tqec`` or ``tqecd`` code. Use it to refresh the HTML after the report/visuals code
 changed. It needs nothing but ``report.json`` (the embedded pictures render regardless; the file
@@ -163,7 +163,7 @@ Run a CNOT across both conventions and three code distances, then read the repor
     report = run_experiment([cnot(Basis.Z)], config, "cnot_run")
     print(report.to_text())
 
-``run_experiment`` writes four files into ``cnot_run/``:
+``run_experiment`` writes three files into ``cnot_run/``:
 
 * ``report.json`` -- the full structured result (one row per gadget / convention / k / window);
 * ``report.html`` -- a self-contained, sortable table (embedded LER plots when simulation runs);

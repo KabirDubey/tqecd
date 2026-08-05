@@ -40,7 +40,12 @@ AppliesPredicate = Callable[[object, "ExperimentConfig"], bool]
 
 
 def logically_equivalent(a: stim.Circuit, b: stim.Circuit) -> bool:
-    """``True`` iff the two circuits' emitted annotation subspaces span the same GF(2) space."""
+    """``True`` iff the two circuits' emitted annotation subspaces span the same GF(2) space.
+
+    ``DETECTOR`` and ``OBSERVABLE`` records are pooled into one span, so this certifies the same
+    overall parity space -- not that observables map to observables specifically. The built-in
+    oracles share identical reattached observables, so for them it is an exact check.
+    """
     if a.num_measurements != b.num_measurements:
         # Different measurement counts -> not comparable at the record level.
         return False
@@ -132,11 +137,6 @@ def available_oracles() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def _main_available(unit: object, config: ExperimentConfig) -> bool:
-    """The windowless oracle applies only when the main-branch tqecd worktree is present."""
-    return annotators.main_branch_src() is not None
-
-
 #: Built-in oracle: tqec's native annotation (the circuit ``prepare_batch`` wrote), every convention.
 NATIVE_ORACLE = CallableOracle(
     name="native",
@@ -144,10 +144,12 @@ NATIVE_ORACLE = CallableOracle(
     applies_to=_always,
 )
 #: Built-in oracle: main-branch (windowless) tqecd, run out-of-process. Isolates the windowing pass.
+#: It always applies when selected: if the main-branch worktree is missing, ``annotate`` raises and
+#: the row records the error (surfaced in the oracle's cell) rather than silently omitting it.
 MAIN_ORACLE = CallableOracle(
     name="tqecd_main",
     emit=lambda unit, k, native: annotators.main_branch_reannotation(native),
-    applies_to=_main_available,
+    applies_to=_always,
 )
 register_oracle(NATIVE_ORACLE)
 register_oracle(MAIN_ORACLE)

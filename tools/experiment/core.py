@@ -45,7 +45,7 @@ def _noisy(circuit: stim.Circuit, noise_model: str, p: float) -> stim.Circuit:
 
 
 def _observable_label(unit: Any) -> str:
-    """The simulated observable(s) as a compact string of external stabilizers (item 4)."""
+    """The simulated observable(s) as a compact string of external stabilizers."""
     observables = getattr(unit, "logical_observables", ()) or ()
     return ", ".join(o.external_stabilizer for o in observables)
 
@@ -419,7 +419,7 @@ def run_experiment(
     oracles: Sequence[Any] = (),
     show_progress: bool = True,
 ) -> ExperimentReport:
-    """Run a batched gadget experiment and write ``report.{json,html,txt,csv}`` under ``out_dir``.
+    """Run a batched gadget experiment and write ``report.{json,html,txt}`` under ``out_dir``.
 
     Args:
         inputs: a mix of ``.dae`` / ``.bgraph`` paths and in-memory ``BlockGraph`` objects, passed
@@ -532,7 +532,7 @@ def reannotate_run(
 
 
 def render_report(run_dir: str | Path) -> ExperimentReport:
-    """Rebuild ``report.html`` (and ``report.txt`` / ``report.csv``) from an existing report--UI only.
+    """Rebuild ``report.html`` (and ``report.txt``) from an existing report--UI only.
 
     This reads the run's ``report.json`` and re-renders it through the current report UI. No
     circuits are read, no annotation runs, and no scores change: it is a pure view rebuild for
@@ -617,11 +617,8 @@ def simulate_run(
     # point the manifest's generation config at the requested noise so simulate_batch measures it
     manifest.config = config.to_batch_config()
 
+    # simulate.augment writes fresh MCMC results into report.meta["mcmc"], replacing any earlier run.
     report = ExperimentReport.from_json(report_path)
-    # a re-measure replaces any earlier LER curves rather than keeping stale ones
-    for row in report.rows:
-        row.ler_plot = None
-        row.lambda_factor = None
 
     from tools.experiment import simulate as simulate_mod
 

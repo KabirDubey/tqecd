@@ -2,10 +2,10 @@
 
 This is the Monte-Carlo (``sinter``) sampling stage: it applies noise to the prepared circuits and
 runs one flattened ``sinter.collect`` (via ``tqec.orchestration.simulate_batch``). It is opt-in and
-slow, so it lives outside the core loop. Results are written under ``<out>/mcmc/`` -- one LER-vs-p
-plot PNG per gadget plus a ``setup.txt`` describing the sampling -- and summarised in
-``report.meta["mcmc"]`` so the report can show an MCMC section (a row per gadget with links to its
-plot and to the sampling setup).
+slow, so it lives outside the core loop. Results are written under ``<out>/mcmc/`` -- a ``setup.txt``
+describing the sampling plus, when ``simulation.plot`` is set, one LER-vs-p plot PNG per gadget --
+and summarised in ``report.meta["mcmc"]`` so the report can show an MCMC section (a row per gadget
+with links to its plot and to the sampling setup).
 """
 
 from __future__ import annotations
@@ -93,10 +93,10 @@ def augment(
 ) -> ExperimentReport:
     """Run ``simulate_batch`` and record the MCMC results in ``report.meta["mcmc"]``.
 
-    Writes one LER-vs-p plot PNG per ``(gadget, convention)`` and a sampling setup file under
-    ``<out_dir>/mcmc/``; the report renders these as an MCMC section (a row per gadget with a link
-    to its plot and to the setup). The LER is independent of the tqecd window, so one curve set is
-    produced per ``(gadget, convention)``.
+    Writes a sampling setup file and, when ``simulation.plot`` is set, one LER-vs-p plot PNG per
+    ``(gadget, convention)`` under ``<out_dir>/mcmc/``; the report renders these as an MCMC section
+    (a row per gadget with links to its plot and to the setup). The LER is independent of the tqecd
+    window, so one curve set is produced per ``(gadget, convention)``.
     """
     from tqec.orchestration import simulate_batch
 

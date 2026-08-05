@@ -22,7 +22,7 @@ from tqec.gallery import cnot
 from tqec.utils.enums import Basis
 
 report = run_experiment([cnot(Basis.Z)], ExperimentConfig(ks=(1, 2)), "out")
-print(report.to_text())   # also writes out/report.{json,html,txt} (+ report.csv with polars)
+print(report.to_text())   # also writes out/report.{json,html,txt}
 ```
 
 ## Signals (no ground truth by default)

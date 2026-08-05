@@ -136,7 +136,12 @@ class ExperimentConfig:
         }
 
     def to_toml(self) -> str:
-        """Render the config as ``[experiment]`` TOML (round-trips through :meth:`from_toml`)."""
+        """Render the config as ``[experiment]`` TOML for the report's config link.
+
+        Round-trips through :meth:`from_toml`, except that when MCMC sampling is disabled the unused
+        sampling parameters are omitted (they reload as defaults); ``config.json`` is the
+        authoritative round-trip used by ``render`` / ``reannotate``.
+        """
         data = self.to_dict()
         simulation = data.pop("simulation")
         lines = ["[experiment]"]
