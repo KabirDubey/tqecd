@@ -236,6 +236,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.gallery:
         inputs = _gallery_graphs(args.gallery)
     elif args.input:
+        missing = [str(p) for p in args.input if not Path(p).exists()]
+        if missing:
+            raise SystemExit(
+                f"--input file(s) not found: {', '.join(missing)} "
+                "(pass an existing .dae or .bgraph path)"
+            )
         inputs = [str(p) for p in args.input]
     else:  # config-only run defaults to a cnot smoke gadget
         inputs = _gallery_graphs("cnot")

@@ -72,8 +72,8 @@ Run from the command line:
     # from a config file
     python -m tools.experiment --config tools/experiment/configs/ler.toml
 
-    # from a .dae / .bgraph file
-    python -m tools.experiment --input my_gadget.dae --k 1,2,3
+    # from a .dae / .bgraph file (substitute a real path -- the file must exist)
+    python -m tools.experiment --input path/to/gadget.bgraph --k 1,2,3
 
     # list the available gallery gadgets
     python -m tools.experiment --list-gallery
