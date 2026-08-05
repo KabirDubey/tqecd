@@ -612,4 +612,4 @@ def _print_console_summary(
         file=sys.stderr,
     )
     print(f"to see the report in your browser run: open {html_path}", file=sys.stderr)
-    print(f"  or the json/csv: open {out_dir.resolve()}", file=sys.stderr)
+    print(f"  or the json / txt: open {out_dir.resolve()}", file=sys.stderr)
