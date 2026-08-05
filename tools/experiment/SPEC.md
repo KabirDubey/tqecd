@@ -61,7 +61,7 @@ test), `logical_observables`, `predictors` (`parities`, `distance`), `oracles`, 
 
 ## Report
 
-One row per (gadget, convention, k, window). Every row records
+One row per (gadget, convention, k, observable). Every row records
 `missing_parities`, `distance` vs `expected_distance`, `predictors_pass`, `runtime_s` (annotation +
 analysis wall time), and per-row debugging artifacts. A gadget `tqec` cannot compile yet is a
 non-ready row carried into the report, not a silent drop.
