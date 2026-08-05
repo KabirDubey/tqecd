@@ -82,13 +82,13 @@ def test_oracle_columns_and_group_render():
 def test_mcmc_section_renders_when_present():
     # items 5b/6/12: an MCMC section (per-gadget plot + setup links) appears only when sampled.
     report = _report()
-    assert "MCMC sampling" not in report.to_html()  # off by default
+    assert 'class="mcmc"' not in report.to_html()  # no MCMC section by default
     report.meta = {"mcmc": {"enabled": True, "aggregate": "success", "results": 4,
                             "setup": "mcmc/setup.txt",
                             "gadgets": [{"gadget_id": "g0", "convention": "fixed_bulk",
                                          "plot": "mcmc/ler_g0.png", "lambda": 2.5}]}}
     html = report.to_html()
-    assert "MCMC sampling" in html and "mcmc/ler_g0.png" in html and "mcmc/setup.txt" in html
+    assert 'class="mcmc"' in html and "mcmc/ler_g0.png" in html and "mcmc/setup.txt" in html
 
 
 def test_top_header_shows_name_and_config_link():
