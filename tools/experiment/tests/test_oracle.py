@@ -31,11 +31,11 @@ def test_only_native_is_built_in():
     assert available_oracles() == ["native"]
 
 
-def test_native_oracle_resolves_and_scopes_to_fixed_bulk():
-    # Selectable by name with one keyword, and only a valid reference for fixed_bulk.
+def test_native_oracle_resolves_and_applies_to_every_convention():
+    # Selectable by name with one keyword, and a valid reference under any convention.
     assert build_oracles(["native"])[0] is NATIVE_ORACLE
     assert NATIVE_ORACLE.applies(_Unit("fixed_bulk"), None) is True
-    assert NATIVE_ORACLE.applies(_Unit("fixed_boundary"), None) is False
+    assert NATIVE_ORACLE.applies(_Unit("fixed_boundary"), None) is True
 
 
 def test_native_oracle_reference_is_the_native_circuit_and_compares():

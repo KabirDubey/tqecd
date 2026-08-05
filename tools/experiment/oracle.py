@@ -20,10 +20,12 @@ to :func:`tools.experiment.core.run_experiment`.
 
 One built-in oracle ships registered: :data:`NATIVE_ORACLE`, named ``"native"``. It uses ``tqec``'s
 own native annotation (the subtemplate route in ``tqec.compile.detectors.compute``) as the ground
-truth for the ``tqecd.annotate_detectors_automatically`` reannotation under test. This is the one
-documented exception to "no ground truth": native is a reliable reference **for the ``fixed_bulk``
-convention** (so the oracle only applies there). It is still opt-in -- nothing runs it unless a run
-selects it by name (``oracles = ["native"]`` in a config, or ``--oracles native`` on the CLI).
+truth for the ``tqecd.annotate_detectors_automatically`` reannotation under test. It applies to
+**every convention** -- the native annotation is the circuit ``prepare_batch`` wrote, so it is a
+valid same-behavior reference wherever ``tqec`` could compile the gadget. It is still opt-in --
+nothing runs it unless a run selects it by name (``oracles = ["native"]`` in a config, or
+``--oracles native`` on the CLI). It reports logical equivalence only; a run can still pass its
+predictors while the reannotation differs from native (they are complementary signals).
 """
 
 from __future__ import annotations
@@ -197,14 +199,8 @@ def _native_reference(unit: object, k: int, native: stim.Circuit) -> stim.Circui
     return native
 
 
-def _is_fixed_bulk(unit: object, config: ExperimentConfig) -> bool:
-    """native is a reliable reference only for the ``fixed_bulk`` convention."""
-    return getattr(unit, "convention", "") == "fixed_bulk"
-
-
-#: Built-in oracle: tqec's native ``fixed_bulk`` annotation as ground truth for the
-#: ``annotate_detectors_automatically`` reannotation under test. Opt in with ``oracles=["native"]``.
-NATIVE_ORACLE = CallableOracle(
-    name="native", emit=_native_reference, applies_to=_is_fixed_bulk
-)
+#: Built-in oracle: tqec's native annotation (whatever convention the gadget compiled under) as a
+#: same-behavior reference for the ``annotate_detectors_automatically`` reannotation under test.
+#: Applies to every convention. Opt in with ``oracles=["native"]``.
+NATIVE_ORACLE = CallableOracle(name="native", emit=_native_reference, applies_to=_always)
 register_oracle(NATIVE_ORACLE)

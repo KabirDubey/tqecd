@@ -37,7 +37,7 @@ Experiment options
 
 ``oracles``
     Names of registered reference oracles to apply (see `Oracles`_). One is built in: ``"native"``
-    (tqec's own annotation as the ground truth for the tqecd reannotation, ``fixed_bulk`` only).
+    (tqec's own annotation as the ground truth for the tqecd reannotation, every convention).
     Otherwise there is no ground truth unless you supply one.
 
 ``noise_models``
@@ -121,18 +121,18 @@ GF(2).
 
 The subject under test is always ``tqecd.annotate_detectors_automatically`` (the reannotation).
 The built-in **``native``** oracle uses ``tqec``'s own native annotation as its ground truth and is
-the easiest way to check the reannotation against tqec: just select it by name.
+the easiest way to check the reannotation against tqec.
 
 .. code-block:: bash
 
     python -m tools.experiment --gallery memory --k 1,2 --oracles native
 
-It applies only to the ``fixed_bulk`` convention (where native is the reliable reference; it is
-*not* trustworthy for most other gadgets, which is why nothing else ships pre-registered). Note it
-is a logical-equivalence check: it confirms the reannotation spans native's parity space, but a
-reannotation can be logically equivalent yet still fail the ``distance`` predictor (e.g. redundant
-detectors that break graphlike decodability) -- the two signals are complementary. Supply your own
-oracle only where you have a known-correct reference that shares the gadget's macroscopic behavior.
+It applies to **every convention**: native is the circuit ``prepare_batch`` wrote, so it is a valid
+same-behavior reference wherever ``tqec`` could compile the gadget. Note it is a logical-equivalence
+check: it confirms the reannotation spans native's parity space, but a reannotation can be logically
+equivalent yet still fail the ``distance`` predictor (e.g. redundant detectors that break
+matchability) -- the two signals are complementary. Supply your own oracle only where you have a
+known-correct reference that shares the gadget's macroscopic behavior.
 
 Two kinds are provided:
 
