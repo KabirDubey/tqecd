@@ -148,7 +148,14 @@ class ExperimentReport:
         ]
         for name in self.meta.get("oracles", []):
             cols.append(
-                (f"{name}:dist", (lambda n: lambda r: (r.oracle_results.get(n) or {}).get("distance"))(name))
+                (
+                    f"{name}:dist",
+                    (
+                        lambda n: (
+                            lambda r: (r.oracle_results.get(n) or {}).get("distance")
+                        )
+                    )(name),
+                )
             )
         return cols
 
@@ -189,44 +196,151 @@ class ExperimentReport:
             return lambda r: getattr(r, attr)
 
         cols: list[dict[str, Any]] = [
-            {"key": "result", "label": "Result", "default": True, "render": _result_cell},
-            {"key": "name", "label": "Name", "group": "gadget", "glabel": "Gadget",
-             "default": True, "sortable": True, "render": _name_cell},
-            {"key": "block_graph", "label": "3D", "group": "gadget", "default": True,
-             "render": lambda r: _block_graph_cell(gv.get(r.gadget_id, {}))},
-            {"key": "zx", "label": "ZX", "group": "gadget", "default": True,
-             "render": lambda r: _zx_cell(gv.get(r.gadget_id, {}))},
-            {"key": "observable", "label": "Observable", "default": True, "sortable": True,
-             "render": lambda r: _text_cell(r.observable)},
-            {"key": "convention", "label": "Convention", "default": True, "sortable": True,
-             "render": lambda r: _text_cell(r.convention)},
-            {"key": "k", "label": "k", "default": True, "numeric": True, "value": num("k")},
-            {"key": "window", "label": "Window", "default": False, "numeric": True, "value": num("window")},
-            {"key": "missing", "label": "Missing parities", "default": "parities" in predictors,
-             "numeric": True, "value": num("missing_parities")},
-            {"key": "distance", "label": "Distance", "default": "distance" in predictors,
-             "numeric": True, "value": num("distance")},
-            {"key": "expected", "label": "Expected", "default": False, "numeric": True,
-             "value": num("expected_distance")},
-            {"key": "runtime", "label": "Runtime (s)", "default": True, "numeric": True,
-             "value": num("runtime_s")},
+            {
+                "key": "result",
+                "label": "Result",
+                "default": True,
+                "render": _result_cell,
+            },
+            {
+                "key": "name",
+                "label": "Name",
+                "group": "gadget",
+                "glabel": "Gadget",
+                "default": True,
+                "sortable": True,
+                "render": _name_cell,
+            },
+            {
+                "key": "block_graph",
+                "label": "3D",
+                "group": "gadget",
+                "default": True,
+                "render": lambda r: _block_graph_cell(gv.get(r.gadget_id, {})),
+            },
+            {
+                "key": "zx",
+                "label": "ZX",
+                "group": "gadget",
+                "default": True,
+                "render": lambda r: _zx_cell(gv.get(r.gadget_id, {})),
+            },
+            {
+                "key": "observable",
+                "label": "Observable",
+                "default": True,
+                "sortable": True,
+                "render": lambda r: _text_cell(r.observable),
+            },
+            {
+                "key": "convention",
+                "label": "Convention",
+                "default": True,
+                "sortable": True,
+                "render": lambda r: _text_cell(r.convention),
+            },
+            {
+                "key": "k",
+                "label": "k",
+                "default": True,
+                "numeric": True,
+                "value": num("k"),
+            },
+            {
+                "key": "window",
+                "label": "Window",
+                "default": False,
+                "numeric": True,
+                "value": num("window"),
+            },
+            {
+                "key": "missing",
+                "label": "Missing parities",
+                "default": "parities" in predictors,
+                "numeric": True,
+                "value": num("missing_parities"),
+            },
+            {
+                "key": "distance",
+                "label": "Distance",
+                "default": "distance" in predictors,
+                "numeric": True,
+                "value": num("distance"),
+            },
+            {
+                "key": "expected",
+                "label": "Expected",
+                "default": False,
+                "numeric": True,
+                "value": num("expected_distance"),
+            },
+            {
+                "key": "runtime",
+                "label": "Runtime (s)",
+                "default": True,
+                "numeric": True,
+                "value": num("runtime_s"),
+            },
             {"key": "links", "label": "Links", "default": True, "render": _links_cell},
-            {"key": "notes", "label": "Notes", "default": True, "sortable": True,
-             "render": lambda r: _text_cell(r.notes)},
-            {"key": "input", "label": "Input", "default": False, "sortable": True,
-             "render": lambda r: _text_cell(r.source)},
+            {
+                "key": "notes",
+                "label": "Notes",
+                "default": True,
+                "sortable": True,
+                "render": lambda r: _text_cell(r.notes),
+            },
+            {
+                "key": "input",
+                "label": "Input",
+                "default": False,
+                "sortable": True,
+                "render": lambda r: _text_cell(r.source),
+            },
         ]
         for name in self.meta.get("oracles", []):
             g = f"oracle:{name}"
             cols += [
-                {"key": f"{g}:dist", "label": "dist", "group": g, "glabel": name, "mlabel": f"{name} dist",
-                 "default": True, "numeric": True,
-                 "value": (lambda n: lambda r: (r.oracle_results.get(n) or {}).get("distance"))(name)},
-                {"key": f"{g}:eq", "label": "≡", "group": g, "mlabel": f"{name} equivalent",
-                 "default": True, "sortable": True,
-                 "render": (lambda n: lambda r: _eq_cell((r.oracle_results.get(n) or {}).get("equivalent")))(name)},
-                {"key": f"{g}:stim", "label": "stim", "group": g, "mlabel": f"{name} stim", "default": True,
-                 "render": (lambda n: lambda r: _oracle_stim_cell(r.oracle_results.get(n) or {}))(name)},
+                {
+                    "key": f"{g}:dist",
+                    "label": "dist",
+                    "group": g,
+                    "glabel": name,
+                    "mlabel": f"{name} dist",
+                    "default": True,
+                    "numeric": True,
+                    "value": (
+                        lambda n: (
+                            lambda r: (r.oracle_results.get(n) or {}).get("distance")
+                        )
+                    )(name),
+                },
+                {
+                    "key": f"{g}:eq",
+                    "label": "≡",
+                    "group": g,
+                    "mlabel": f"{name} equivalent",
+                    "default": True,
+                    "sortable": True,
+                    "render": (
+                        lambda n: (
+                            lambda r: _eq_cell(
+                                (r.oracle_results.get(n) or {}).get("equivalent")
+                            )
+                        )
+                    )(name),
+                },
+                {
+                    "key": f"{g}:stim",
+                    "label": "stim",
+                    "group": g,
+                    "mlabel": f"{name} stim",
+                    "default": True,
+                    "render": (
+                        lambda n: (
+                            lambda r: _oracle_stim_cell(r.oracle_results.get(n) or {})
+                        )
+                    )(name),
+                },
             ]
         return cols
 
@@ -278,13 +392,15 @@ class ExperimentReport:
                 cells.append(f'<td data-col="{key}">{col["render"](r)}</td>')
         return (
             f'<tr class="datarow {r.status_kind}" data-kind="{r.status_kind}" '
-            f'data-gadget="{html.escape(r.gadget_id.lower())}">' + "".join(cells) + "</tr>"
+            f'data-gadget="{html.escape(r.gadget_id.lower())}">'
+            + "".join(cells)
+            + "</tr>"
         )
 
     def _menu_html(self, cols: list[dict[str, Any]]) -> str:
         return "".join(
             f'<label><input type="checkbox" data-colcb="{col["key"]}"/> '
-            f'{html.escape(col.get("mlabel", col["label"]))}</label>'
+            f"{html.escape(col.get('mlabel', col['label']))}</label>"
             for col in cols
         )
 
@@ -309,7 +425,9 @@ class ExperimentReport:
                 f'rel="noopener">config.toml</a>'
             )
         sub = " &middot; ".join(bits)
-        return f"<h1>{title}</h1>" + (f'<div class="runmeta">{sub}</div>' if sub else "")
+        return f"<h1>{title}</h1>" + (
+            f'<div class="runmeta">{sub}</div>' if sub else ""
+        )
 
     def _mcmc_section(self) -> str:
         mcmc = self.meta.get("mcmc")
@@ -318,11 +436,12 @@ class ExperimentReport:
         setup = mcmc.get("setup")
         setup_link = (
             f' &middot; <a class="link" href="{html.escape(setup)}" target="_blank" rel="noopener">sampling setup</a>'
-            if setup else ""
+            if setup
+            else ""
         )
         head = (
             f'<p class="muted">Monte-Carlo (sinter) sampling &mdash; aggregate '
-            f'{html.escape(str(mcmc.get("aggregate", "")))}, {mcmc.get("results", 0)} sampled cases'
+            f"{html.escape(str(mcmc.get('aggregate', '')))}, {mcmc.get('results', 0)} sampled cases"
             f"{setup_link}</p>"
         )
         rows = []
@@ -331,20 +450,28 @@ class ExperimentReport:
             plot_cell = (
                 f'<a href="{html.escape(plot)}" target="_blank" rel="noopener">'
                 f'<img class="plotthumb" src="{html.escape(plot)}" alt="LER-vs-p plot"/></a>'
-                if plot else "&ndash;"
+                if plot
+                else "&ndash;"
             )
             lam = g.get("lambda")
             rows.append(
-                "<tr><td>" + html.escape(g.get("gadget_id", "")) + "</td><td>"
-                + html.escape(g.get("convention", "")) + "</td><td class=\"num\">"
+                "<tr><td>"
+                + html.escape(g.get("gadget_id", ""))
+                + "</td><td>"
+                + html.escape(g.get("convention", ""))
+                + '</td><td class="num">'
                 + (f"{lam:.3g}" if isinstance(lam, (int, float)) else "&ndash;")
-                + "</td><td>" + plot_cell + "</td></tr>"
+                + "</td><td>"
+                + plot_cell
+                + "</td></tr>"
             )
         return (
-            '<section class="mcmc"><h2>MCMC sampling</h2>' + head
+            '<section class="mcmc"><h2>MCMC sampling</h2>'
+            + head
             + '<div class="wrap"><table><thead><tr><th>Gadget</th><th>Convention</th>'
             + '<th class="num">Lambda</th><th>LER-vs-p plot</th></tr></thead><tbody>'
-            + "".join(rows) + "</tbody></table></div></section>"
+            + "".join(rows)
+            + "</tbody></table></div></section>"
         )
 
     def to_html(self) -> str:
@@ -452,7 +579,9 @@ def _links_cell(r: ExperimentRow) -> str:
 
 def _eq_cell(equivalent: Any) -> str:
     if equivalent is True:
-        return '<span title="logically equivalent to the experimental annotation">✓</span>'
+        return (
+            '<span title="logically equivalent to the experimental annotation">✓</span>'
+        )
     if equivalent is False:
         return '<span class="bad" title="NOT logically equivalent to the experimental annotation">✗</span>'
     return "&ndash;"
@@ -460,7 +589,9 @@ def _eq_cell(equivalent: Any) -> str:
 
 def _oracle_stim_cell(res: dict[str, Any]) -> str:
     if res.get("error"):
-        return f'<span class="bad" title="{html.escape(str(res["error"]))}">error</span>'
+        return (
+            f'<span class="bad" title="{html.escape(str(res["error"]))}">error</span>'
+        )
     stim = res.get("stim")
     if stim:
         return (
@@ -477,7 +608,9 @@ def _result_explanation(r: ExperimentRow) -> str:
             f"distance {r.distance} == expected {r.expected_distance}"
         )
     if r.status_kind == PREDICTOR_FAIL:
-        return "predictor fail: " + (r.notes or "did not reach full distance / parity completeness")
+        return "predictor fail: " + (
+            r.notes or "did not reach full distance / parity completeness"
+        )
     if r.status_kind == PREP_FAIL:
         base = "prep fail: tqec could not prepare this gadget"
         return f"{base} ({r.notes})" if r.notes else base
@@ -558,7 +691,7 @@ __TOPHEADER__
 
 <div class="wrap" tabindex="0">
 <table id="t">
-<caption>One row per (gadget, convention, k, window). Click a header to sort; use Columns to show or hide any column.</caption>
+<caption>One row per (gadget, convention, k, observable). Click a header to sort; use Columns to show or hide any column.</caption>
 <thead>__HEADER__</thead>
 <tbody>
 __ROWS__
