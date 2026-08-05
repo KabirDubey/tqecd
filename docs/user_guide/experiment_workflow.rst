@@ -84,6 +84,15 @@ Run from the command line:
     # re-annotate and re-score a run's on-disk circuits with tqecd (no recompile)
     python -m tools.experiment --reannotate out
 
+    # measure an existing run under a noise model (LER plots); delete a run's output
+    python -m tools.experiment --simulate out --noise-models uniform_depolarizing
+    python -m tools.experiment --clean out
+
+While a run is scoring, a ``tqdm`` progress bar labelled ``scoring rows`` advances once per
+(gadget, convention, k, window) circuit as it is re-annotated with ``tqecd`` and measured. A
+gadget's **score** is a pass/fail verdict: it passes when its ``tqecd`` annotation is complete (zero
+missing parities) and its noisy circuit reaches the expected code distance ``2k + 1``.
+
 Re-using a run without recompiling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
