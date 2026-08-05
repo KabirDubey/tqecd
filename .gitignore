@@ -188,3 +188,12 @@ requirements-dev.lock
 
 # Ruff
 .ruff_cache
+
+# experiment tool: generated run output and logs (never committed; use `--clean` to remove)
+/experiment_out/
+**/experiment_out/
+tools/experiment/notebooks/__marimo__/
+
+# uv rewrites this lockfile on every command; do not commit it
+/uv.lock
+tools/experiment/uv.lock

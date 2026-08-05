@@ -10,6 +10,7 @@ Examples::
     python -m tools.experiment --reannotate experiment_out            # re-score from disk, no recompile
     python -m tools.experiment --reannotate experiment_out --windows 3  # re-score a new tqecd window
     python -m tools.experiment --simulate experiment_out --noise-models si1000  # LER, no rebuild
+    python -m tools.experiment --clean experiment_out                # delete a run's output + logs
 
 ``--gallery all`` runs every gadget in ``tqec.gallery`` in one experiment; ``--gallery <name>``
 runs a single one; ``--list-gallery`` prints the available names. ``--render <run_dir>`` rebuilds
@@ -116,6 +117,14 @@ def main(argv: list[str] | None = None) -> int:
         metavar="RUN_DIR",
         help="measure an existing run dir's circuits under a noise model (LER plots), no recompile",
     )
+    source.add_argument(
+        "--clean",
+        type=Path,
+        nargs="?",
+        const=Path("experiment_out"),
+        metavar="RUN_DIR",
+        help="delete a run directory's generated output and logs (default: experiment_out)",
+    )
     parser.add_argument("--k", type=_ints, help="comma-separated ks, e.g. 1,2,3")
     parser.add_argument("--conventions", type=lambda s: tuple(s.split(",")))
     parser.add_argument("--windows", type=_ints)
@@ -138,6 +147,32 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_gallery:
         print("gallery gadgets:", ", ".join(sorted(_gallery_builders())))
         print("'all' runs every canonical gadget:", ", ".join(_GALLERY_ALL))
+        return 0
+
+    if args.clean is not None:
+        import shutil
+
+        target = args.clean
+        if not target.exists():
+            print(f"nothing to clean: {target} does not exist", file=sys.stderr)
+            return 0
+        # Guard against a mistyped path wiping something important: only remove a directory that
+        # actually looks like an experiment run (its own generated output + logs).
+        markers = ("report.json", "logs", "config.json")
+        looks_like_run = (
+            target.name == "experiment_out"
+            or any((target / m).exists() for m in markers)
+            or any(target.glob("mr*"))
+        )
+        if not target.is_dir() or not looks_like_run:
+            print(
+                f"refusing to clean {target}: it does not look like an experiment run dir "
+                "(expected report.json / logs / config.json / mr*).",
+                file=sys.stderr,
+            )
+            return 2
+        shutil.rmtree(target)
+        print(f"removed experiment run output at {target.resolve()}", file=sys.stderr)
         return 0
 
     if args.render:
