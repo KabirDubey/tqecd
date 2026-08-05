@@ -1,9 +1,4 @@
-"""``ExperimentConfig``--a thin façade that lowers to a ``tqec.orchestration.BatchConfig``.
-
-The ``tqec`` import is deferred into :meth:`ExperimentConfig.to_batch_config` so that importing
-this module (and the ``stim`` + ``tqecd`` + ``numpy`` layers) never requires the optional
-``tqec`` dependency.
-"""
+"""``ExperimentConfig``--the knobs for a run, lowered to a ``tqec.orchestration.BatchConfig``."""
 
 from __future__ import annotations
 
@@ -31,7 +26,7 @@ def _toml_value(value: Any) -> str | None:
 
 @dataclass(frozen=True)
 class SimulationConfig:
-    """Optional gold-standard simulation (LER / Lambda). Off by default."""
+    """Optional MCMC sampling (LER-vs-p + Lambda suppression factor). Off by default."""
 
     enabled: bool = False
     noise_models: tuple[str, ...] = ("uniform_depolarizing",)

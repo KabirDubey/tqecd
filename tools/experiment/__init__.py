@@ -1,9 +1,8 @@
 """``experiment``--run batched experiments over gadgets using ``tqec.orchestration``.
 
-A developer tool (living outside ``src/tqecd``, so ``tqecd`` itself never depends on ``tqec``):
-it hands gadgets to ``tqec.orchestration.prepare_batch``, re-annotates each prepared circuit with
-``tqecd``, and measures ground-truth-free predictors (plus reference oracles where valid, and an
-optional gold-standard LER/Lambda mode).
+A developer tool that hands gadgets to ``tqec.orchestration.prepare_batch``, re-annotates each
+prepared circuit with ``tqecd``, and measures predictors (missing parities, distance) plus, when
+configured, alternate-annotator oracles and an opt-in MCMC-sampling (LER-vs-p + Lambda) stage.
 
 Importing this package isolates ``tqec``'s detector-database cache (see :func:`_isolate_detector_db`).
 """

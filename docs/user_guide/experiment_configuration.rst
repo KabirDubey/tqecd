@@ -10,6 +10,15 @@ is a valid (CNOT smoke) run.
 Experiment options
 ------------------
 
+``name``
+    An optional label for the experiment, shown at the top of the report. Default ``""``.
+
+``inputs``
+    The gadgets this run scores, so a config fully defines its own experiment (no CLI ``--gallery``
+    needed). Each entry is a ``tqec.gallery`` name (``"cnot"``, ...), ``"all"``, a tool-provided
+    batch (``"hadamard_arrangements"``, ``"spatial_junctions"``), or a ``.dae`` / ``.bgraph`` path.
+    Default ``()`` (the CLI supplies the inputs instead).
+
 ``conventions``
     Compilation conventions to build each gadget under. Available: ``"fixed_bulk"`` and
     ``"fixed_boundary"``. Default ``("fixed_bulk",)``.
@@ -31,9 +40,9 @@ Experiment options
     ``"distance"`` (shortest graphlike error vs ``2k+1``). Default ``("parities", "distance")``.
 
 ``oracles``
-    Names of registered reference oracles to apply (see `Oracles`_). One is built in: ``"native"``
-    (tqec's own annotation as the ground truth for the tqecd reannotation, every convention).
-    Otherwise there is no ground truth unless you supply one.
+    Names of oracle *alternate annotators* to score side by side (see `Oracles`_). Two are built
+    in: ``"native"`` (tqec's own annotation) and ``"tqecd_main"`` (the windowless main-branch
+    ``tqecd``). Default ``()`` -- just the experimental annotator.
 
 ``noise_models``
     Noise model(s) for the ``distance`` predictor (the first is used): ``"uniform_depolarizing"``
@@ -50,7 +59,7 @@ Experiment options
     ``"materialized"``.
 
 ``simulation``
-    A ``SimulationConfig`` (below) for the optional gold-standard LER mode.
+    A ``SimulationConfig`` (below) for the optional MCMC sampling stage.
 
 Simulation options
 -----------------
@@ -58,7 +67,7 @@ Simulation options
 Set under ``[experiment.simulation]`` in TOML, or via ``SimulationConfig``. Off by default.
 
 ``enabled``
-    Turn the gold-standard LER mode on. Default ``false``.
+    Turn MCMC sampling on. Default ``false``.
 
 ``noise_models`` / ``ps``
     Noise model(s) and physical error rate sweep for sampling. When simulation is enabled these
@@ -109,26 +118,30 @@ Load and run it:
 Oracles
 -------
 
-Oracles are **optional** and never enabled by default. Comparison is by logical equivalence --
-the two annotations' ``DETECTOR`` / ``OBSERVABLE`` parity subspaces must span the same space over
-GF(2).
+The experimental subject is always ``tqecd``'s windowed ``annotate_detectors_automatically``. An
+**oracle is an alternate annotator**: it produces its own annotation of the same gadget, which is
+scored on the *same* metric (distance vs ``2k+1``, missing parities), checked for logical
+equivalence to the experimental one (their ``DETECTOR`` / ``OBSERVABLE`` parity subspaces span the
+same GF(2) space), and gets its ``.stim`` written for a report link. Each oracle appears as its own
+column group ``[dist | equiv | stim]``. Oracles are opt-in; none run unless selected.
 
-The subject under test is always ``tqecd.annotate_detectors_automatically`` (the reannotation).
-The built-in **``native``** oracle uses ``tqec``'s own native annotation as its ground truth and is
-the easiest way to check the reannotation against tqec.
+Two ship built in:
+
+* ``native`` -- ``tqec``'s own native annotation (the circuit ``prepare_batch`` wrote), every
+  convention.
+* ``tqecd_main`` -- the main-branch (windowless) ``tqecd`` ``annotate_detectors_automatically``,
+  run out-of-process; it isolates the effect of windowing. Applies only when the main-branch
+  worktree is present (``.tqecd-main`` or ``TQECD_MAIN_SRC``).
 
 .. code-block:: bash
 
-    python -m tools.experiment --gallery memory --k 1,2 --oracles native
+    # spatial Z/X junctions: tqecd windowing vs native vs windowless main-branch tqecd
+    python -m tools.experiment --config tools/experiment/configs/spatial_junction_comparison.toml
 
-It applies to **every convention**: native is the circuit ``prepare_batch`` wrote, so it is a valid
-same-behavior reference wherever ``tqec`` could compile the gadget. Note it is a logical-equivalence
-check: it confirms the reannotation spans native's parity space, but a reannotation can be logically
-equivalent yet still fail the ``distance`` predictor (e.g. redundant detectors that break
-matchability) -- the two signals are complementary. Supply your own oracle only where you have a
-known-correct reference that shares the gadget's macroscopic behavior.
+On the spatial junctions this shows the windowed ``tqecd`` failing at ``k=2`` while ``native`` and
+``tqecd_main`` both reach ``2k+1`` -- isolating windowing as the regression.
 
-Two kinds are provided:
+For your own reference, two kinds are provided:
 
 ``CircuitOracle(name, reference_circuit, applies_to=...)``
     A fixed annotated ``stim.Circuit`` used as the reference wherever it applies.

@@ -9,10 +9,11 @@ dependency to ``tqecd`` itself -- and it is a thin consumer of ``tqec.orchestrat
 gadgets to ``prepare_batch``, re-annotates each prepared circuit with ``tqecd``, and measures how
 well that annotation performs.
 
-There is deliberately **no ground truth** built in. For an arbitrary gadget it is often unknown
-whether any annotation reaches full distance, and ``tqec``'s own native annotation is not a
-reliable reference for most gadgets. The tool therefore reports *absolute* properties of the
-re-annotated circuit, and only compares against a reference where a user explicitly supplies one.
+The primary measures are **ground-truth-free predictors** -- absolute properties of the
+re-annotated circuit (missing parities, code distance) that need no reference. When a run
+configures **oracles**, those are *alternate annotators* (``tqec``'s native annotation, the
+windowless main-branch ``tqecd``, or a user-supplied one) scored on the same metric and shown side
+by side, so you can compare annotators directly.
 
 How it works
 ------------
@@ -24,9 +25,9 @@ How it works
       -> reannotate with tqecd              strip detectors, re-run annotate_detectors_automatically, reattach observables
       -> measure
            predictors  (always)   missing_parities, shortest_graphlike_error vs 2k+1
-           oracles     (optional)  compare to a user-supplied reference, up to logical symmetry
-           simulation  (opt-in)    LER-vs-p plots and Lambda factors
-      -> report.{json,html,txt,csv}
+           oracles     (optional)  alternate annotators scored on the same metric, side by side
+           mcmc        (opt-in)    Monte-Carlo sampling: LER-vs-p plots and Lambda factors
+      -> report.{json,html,txt}
 
 Three tiers of signal
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -39,13 +40,15 @@ Predictors
     ``shortest_graphlike_error`` is the code distance of the noisy circuit, compared to ``2k+1``.
 
 Oracles
-    Optional, user-supplied known-correct references, compared up to logical (GF(2) span)
-    symmetry rather than byte-equality. Ground truth is opt-in and often absent. See
-    :ref:`experiment_configuration`.
+    Optional alternate annotators, each scored on the same metric as the experimental one
+    (distance vs ``2k+1``) and additionally checked for logical (GF(2) span) equivalence to it.
+    Two ship built in -- ``native`` (tqec's own annotation) and ``tqecd_main`` (the windowless
+    main-branch ``tqecd``) -- and users can add their own. See :ref:`experiment_configuration`.
 
-Simulation
-    An opt-in gold-standard mode that runs ``tqec.orchestration.simulate_batch`` and attaches an
-    LER-vs-p plot and Lambda (Lambda) suppression factor per gadget. Slow, so it is off by default.
+MCMC sampling
+    An opt-in Monte-Carlo mode that runs ``tqec.orchestration.simulate_batch`` (one
+    ``sinter.collect``) and attaches an LER-vs-p plot and Lambda (Lambda) suppression factor per
+    gadget, shown in the report's MCMC section. Slow, so it is off by default.
 
 Installing and running
 ----------------------
@@ -170,19 +173,18 @@ Each row records ``missing_parities`` (0 means the annotation is complete), ``di
 ``expected_distance`` (``2k+1``), and an overall ``predictors_pass``. A gadget that ``tqec``
 cannot compile yet is recorded as a non-ready row rather than a failure.
 
-To add a reference comparison, pass an oracle (see :ref:`experiment_configuration`):
+To compare annotators, select oracles by name (``native`` and ``tqecd_main`` ship built in):
 
-.. code-block:: python
+.. code-block:: bash
 
-    from tools.experiment.oracle import CallableOracle
+    # spatial Z/X junctions: tqecd windowing vs native vs windowless main-branch tqecd
+    python -m tools.experiment --config tools/experiment/configs/spatial_junction_comparison.toml
 
-    # only meaningful where you know the reference is correct for this gadget
-    reference = CallableOracle(
-        "my_reference",
-        emit=lambda unit, k, native: native,
-        applies_to=lambda unit, config: unit.convention == "fixed_bulk",
-    )
-    report = run_experiment([cnot(Basis.Z)], config, "cnot_run", oracles=[reference])
+Each oracle appears as its own column group ``[dist | equiv | stim]`` beside the experimental
+distance, so you can read all three annotators on one row. On the spatial junctions this shows the
+windowed ``tqecd`` failing at ``k=2`` (distance ``-``) while ``native`` and ``tqecd_main`` both
+reach ``2k+1``. To supply your own reference, pass an oracle object to ``run_experiment`` (see
+:ref:`experiment_configuration`).
 
 See also
 --------

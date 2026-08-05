@@ -11,15 +11,15 @@ contract, and the explicit non-goals. It supersedes the prose in `usage.md` of t
 
 ## Purpose
 
-Exercise `tqecd`'s detector annotation across a battery of gadgets and assert it is correct --
-without a gold standard. `tqec.orchestration` (#1008) owns splitting, compilation, and native
-circuit generation; this tool is a pure downstream consumer that re-annotates the prepared
-circuits with `tqecd`, scores them against absolute invariants, and reports.
+Exercise `tqecd`'s detector annotation across a battery of gadgets and assert it is correct.
+`tqec.orchestration` (#1008) owns splitting, compilation, and native circuit generation; this tool
+is a downstream consumer that re-annotates the prepared circuits with `tqecd`, scores them against
+absolute invariants (and, when configured, against alternate-annotator oracles), and reports.
 
 ## Ground-truth-free validation (core invariant)
 
 A gadget **passes** when its `tqecd`-annotated circuit satisfies two absolute properties of the
-circuit itself -- never a comparison to `native`:
+circuit itself (no reference needed):
 
 1. **`missing_parities == 0`** -- GF(2) flow-completeness: stim's full deterministic-parity space
    reduced against the annotator's emitted DETECTOR/OBSERVABLE subspace leaves no residual.
@@ -27,7 +27,9 @@ circuit itself -- never a comparison to `native`:
    distance. This is an analytic minimum-weight search over the detector error model; it does not
    sample, so it never invokes the simulator.
 
-`native_missing` is reported alongside as a non-authoritative reference column, never asserted.
+Oracles (when configured) add alternate annotators -- `native`, the windowless `tqecd_main`, or a
+user-supplied one -- each scored on the same metric and checked for logical equivalence, shown in
+per-oracle `[dist | equiv | stim]` column groups. They inform; they do not gate the pass verdict.
 
 ## Stages (the contract)
 
@@ -37,9 +39,9 @@ on-disk output and writes into the same run directory.
 | stage | CLI | reads | does | writes |
 | --- | --- | --- | --- | --- |
 | run | `--gallery` / `--input` / `--config` | inputs | prepare_batch (compile) + re-annotate + score | full run dir + `report.*` |
-| render | `--render <dir>` | `report.json` | rebuild the HTML/txt/csv view only -- no tqec/tqecd code runs | `report.{html,txt,csv}` |
-| reannotate | `--reannotate <dir>` | `mr*/manifest.json` circuits | re-annotate with `tqecd` + re-score (no recompile) | `report.*` + fresh visuals |
-| simulate | `--simulate <dir>` | `mr*/manifest.json` circuits + `report.json` | measure LER-vs-p under a noise model (no recompile) | `report.*` + LER plots |
+| render | `--render <dir>` | `report.json` | rebuild the HTML/txt view only -- no tqec/tqecd code runs | `report.{html,txt}` |
+| reannotate | `--reannotate <dir>` | `prepared/manifest.json` circuits | re-annotate with `tqecd` + re-score (no recompile) | `report.*` + fresh visuals |
+| simulate | `--simulate <dir>` | `prepared/manifest.json` circuits + `report.json` | MCMC sampling: LER-vs-p under a noise model (no recompile) | `report.*` + `mcmc/` |
 
 - **run** persists the full config to `config.json` so later stages recover it.
 - **render** needs only `report.json` (rows already carry their `visuals`); it works even after the
@@ -53,9 +55,9 @@ on-disk output and writes into the same run directory.
 ## Config
 
 TOML (`[experiment]` table), lowered to a `tqec.orchestration.BatchConfig`:
-`conventions`, `ks`, `windows` (the tqecd knob under test),
-`logical_observables`, `predictors` (`parities`, `distance`), `oracles`, `noise_models`, `ps`,
-`expected_distance` (`2*k + 1`), `circuit_mode`, and an optional `[simulation]` block.
+`name`, `inputs` (the gadgets to score), `conventions`, `ks`, `windows` (the tqecd knob under
+test), `logical_observables`, `predictors` (`parities`, `distance`), `oracles`, `noise_models`,
+`ps`, `expected_distance` (`2*k + 1`), `circuit_mode`, and an optional `[simulation]` block (MCMC).
 
 ## Report
 
@@ -64,11 +66,12 @@ One row per (gadget, convention, k, window). Every row records
 analysis wall time), and per-row debugging artifacts. A gadget `tqec` cannot compile yet is a
 non-ready row carried into the report, not a silent drop.
 
-`report.html` is a single self-contained file: compact default table, always-visible external
-links (crumble / annotated stim / 3D block graph), per-row expandable details (notes, oracle
-results, positioned-ZX + block-graph pictures, circuit and detector-free links, LER plot),
-selectable columns (incl. runtime), accessible sortable headers, and result/text filters. Runtime
-totals/means are summarized in the text footer.
+`report.html` is a single self-contained file whose columns follow the config: a name + timestamp
++ `config.toml` link header; Result / Gadget (with 3D + decorated-ZX subcolumns) / Observable /
+predictor columns; a `[dist | equiv | stim]` column group per configured oracle; and, when MCMC
+sampling ran, an MCMC section with a per-gadget LER-vs-p plot and a link to the sampling setup.
+Every column is toggleable and the page fits the screen (the table scrolls internally); there is no
+dropdown. Runtime totals/means are in the text footer.
 
 The 3D block-graph viewer is written for every gadget, including pipeless single-cube ones (memory,
 stability) that `tqec`'s `BlockGraph.from_json` rejects -- the tool loads them with a tolerant
@@ -79,10 +82,11 @@ cubes, written to a PNG file and linked instead, so a large gadget never bloats 
 
 ```
 <out>/
-  config.json                 full ExperimentConfig (lets render/reannotate/simulate recover it)
-  report.{json,html,txt,csv}  json is authoritative; html is the human view
+  config.json / config.toml   full ExperimentConfig (json round-trips; toml is linked in the report)
+  report.{json,html,txt}      json is authoritative; html is the human view
   logs/<DDMMMYY_HHMM>_*.log    one per stage invocation
-  artifacts/<gadget>/...       block_graph.html, per-cell annotated.stim / detector_free.stim
+  artifacts/<gadget>/...       block_graph.html, per-cell annotated.stim / detector_free.stim / oracle_*.stim
+  mcmc/                        LER-vs-p plot PNGs + setup.txt (when MCMC sampling ran)
   prepared/                    prepared, noiseless circuits + manifest.json + graphs (from tqec)
 ```
 
@@ -95,8 +99,9 @@ gadget -- the executable companion to this spec.
 
 ## Non-goals (deliberate divergences from `gadgetTesting/usage.md`)
 
-- **No `native` / lightStim / stimflow gold-standard comparison.** Validation is ground-truth-free
-  (invariants above); `native_missing` is shown only as a reference.
+- **Predictors are ground-truth-free** (the invariants above); no lightStim / stimflow annotators.
+  Oracles are *optional* alternate-annotator comparisons (`native`, `tqecd_main`, or user-supplied),
+  scored side by side but never gating the pass verdict.
 - **No embedded stim circuit diagrams** (detector slices, match graphs, timeslice / timeline SVGs).
   They scaled to tens of megabytes per gadget and made the report unopenable; the circuit is
   inspected through the crumble link and the written `.stim` files, and structure through the

@@ -1,8 +1,10 @@
-# FINAL A: every arrangement of a spatial & temporal Hadamard pipe.
-# Run with:  python -m tools.experiment --config tools/experiment/configs/hadamard_arrangements.toml
-# (the CLI feeds a cnot by default; this config is primarily consumed by the tests, which
-# builds the six Hadamard-pipe graphs via tools.experiment.tests.fixtures.hadamard_arrangements)
+# Every arrangement of a single Hadamard pipe (spatial +-x / +-y and temporal +-z), scored on
+# both conventions. The `hadamard_arrangements` batch is supplied by the gadget-test tool itself
+# (tools.experiment.gadgets), so the config fully defines its own run -- no --gallery needed:
+#   python -m tools.experiment --config tools/experiment/configs/hadamard_arrangements.toml
 [experiment]
+name = "Hadamard-pipe arrangements (spatial + temporal)"
+inputs = ["hadamard_arrangements"]
 conventions = ["fixed_bulk", "fixed_boundary"]
 ks = [1, 2]
 windows = [2]

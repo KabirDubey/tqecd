@@ -1,8 +1,8 @@
-# Usage example: the gold-standard LER + Lambda simulation.
+# Usage example: MCMC sampling (LER-vs-p + Lambda).
 #
-# Runs the static predictors AND, because [experiment.simulation] is enabled, a sinter.collect
-# over the prepared circuits to draw a logical-error-rate-vs-p plot per gadget and a Lambda (Λ)
-# error-suppression factor from the two largest k. Slower than a predictor-only run.
+# Runs the static predictors AND, because [experiment.simulation] is enabled, a Monte-Carlo
+# sinter.collect over the prepared circuits to draw a logical-error-rate-vs-p plot per gadget and a
+# Lambda (Λ) error-suppression factor from the two largest k. Slower than a predictor-only run.
 #
 # Run it (the CLI feeds a cnot by default when only --config is given):
 #   python -m tools.experiment --config tools/experiment/configs/ler.toml
