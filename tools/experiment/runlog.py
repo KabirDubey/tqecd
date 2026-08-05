@@ -17,6 +17,11 @@ def timestamp() -> str:
     return datetime.now().strftime("%d%b%y_%H%M")
 
 
+def pretty_now() -> str:
+    """Return a human-readable run time, e.g. ``2026-08-05 07:16``."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
 def make_logger(out_dir: str | Path, name: str = "experiment") -> tuple[logging.Logger, Path]:
     """Create a file logger under ``<out_dir>/logs`` and return ``(logger, log_path)``."""
     logs_dir = Path(out_dir) / "logs"

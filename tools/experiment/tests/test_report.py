@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import json
 
-from tools.experiment.report import _COL_SPECS, ExperimentReport, ExperimentRow
+from tools.experiment.report import ExperimentReport, ExperimentRow
+
+_BASE_COLUMNS = (
+    "result", "name", "block_graph", "zx", "observable", "convention",
+    "k", "window", "missing", "distance", "expected", "runtime", "links", "notes", "input",
+)
 
 
 def _report() -> ExperimentReport:
@@ -52,10 +57,47 @@ def test_html_is_self_contained(tmp_path):
 def test_every_column_has_a_toggle_checkbox():
     # item 6: all columns toggleable -- one menu checkbox per leaf column.
     html = _report().to_html()
-    for key, _, _ in _COL_SPECS:
+    for key in _BASE_COLUMNS:
         assert f'data-colcb="{key}"' in html, f"missing toggle for {key}"
     # the Gadget group header and per-column data-idx (for sorting) are present
     assert 'data-col="__group_gadget"' in html and 'data-idx="0"' in html
+    # dropdown deprecated: no expand button / detail rows
+    assert 'class="expand"' not in html and 'class="detail"' not in html
+    # status column removed (item 9)
+    assert 'data-colcb="status"' not in html
+
+
+def test_oracle_columns_and_group_render():
+    # item 2: oracles become a per-oracle column group [dist / equiv / stim].
+    report = _report()
+    report.meta = {"oracles": ["native"], "predictors": ["parities", "distance"]}
+    report.rows[0].oracle_results = {"native": {"equivalent": True, "distance": 3, "stim": "a.stim"}}
+    html = report.to_html()
+    assert 'data-col="__group_oracle:native"' in html
+    for sub in ("dist", "eq", "stim"):
+        assert f'data-colcb="oracle:native:{sub}"' in html
+    assert "a.stim" in html  # the oracle's stim link
+
+
+def test_mcmc_section_renders_when_present():
+    # items 5b/6/12: an MCMC section (per-gadget plot + setup links) appears only when sampled.
+    report = _report()
+    assert "MCMC sampling" not in report.to_html()  # off by default
+    report.meta = {"mcmc": {"enabled": True, "aggregate": "success", "results": 4,
+                            "setup": "mcmc/setup.txt",
+                            "gadgets": [{"gadget_id": "g0", "convention": "fixed_bulk",
+                                         "plot": "mcmc/ler_g0.png", "lambda": 2.5}]}}
+    html = report.to_html()
+    assert "MCMC sampling" in html and "mcmc/ler_g0.png" in html and "mcmc/setup.txt" in html
+
+
+def test_top_header_shows_name_and_config_link():
+    # item 11: experiment name + timestamp + config.toml link at the top.
+    report = _report()
+    report.meta = {"name": "my run", "timestamp": "2026-08-05 07:16", "config": "config.toml"}
+    html = report.to_html()
+    assert "my run" in html and "2026-08-05 07:16" in html
+    assert 'href="config.toml"' in html
 
 
 def test_observable_and_failure_notes_render():

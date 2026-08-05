@@ -277,11 +277,12 @@ def _attach_visuals(
 
 
 def _write_config(config: ExperimentConfig, out_dir: Path) -> None:
-    """Persist the full config so ``render_report`` can re-render this run from disk later."""
+    """Persist the full config (JSON for round-trip; TOML linked at the top of the report)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "config.json").write_text(
         json.dumps(config.to_dict(), indent=2), encoding="utf-8"
     )
+    (out_dir / "config.toml").write_text(config.to_toml(), encoding="utf-8")
 
 
 def _load_config(run_dir: Path) -> ExperimentConfig:
@@ -385,10 +386,15 @@ def _score_and_render(
         rows=rows,
         gadget_visuals=gadget_visuals,
         meta={
+            "name": config.name,
+            "timestamp": runlog.pretty_now(),
+            "config": "config.toml" if (out_dir / "config.toml").is_file() else "",
             "conventions": list(config.conventions),
             "ks": list(config.ks),
             "windows": list(config.windows),
+            "predictors": list(config.predictors),
             "oracles": [getattr(o, "name", str(o)) for o in oracles],
+            "simulation_enabled": config.simulation.enabled,
             "log": _relpath(log_path, out_dir),
         },
     )
@@ -396,7 +402,7 @@ def _score_and_render(
     if config.simulation.enabled and last_manifest is not None:
         from tools.experiment import simulate
 
-        simulate.augment(report, last_manifest, config)
+        simulate.augment(report, last_manifest, config, out_dir)
 
     report.write(out_dir)
     log.info("wrote report to %s", out_dir)
@@ -626,7 +632,7 @@ def simulate_run(
         sim.noise_models,
         sim.ps,
     )
-    simulate_mod.augment(report, manifest, config)
+    simulate_mod.augment(report, manifest, config, run_dir)
     report.write(run_dir)
     log.info("wrote report to %s", run_dir)
     if show_progress:

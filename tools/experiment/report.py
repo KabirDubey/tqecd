@@ -1,11 +1,10 @@
-"""Experiment rows and reports: ``report.json`` + a self-contained ``report.html`` + text + CSV.
+"""Experiment rows and reports: ``report.json`` + a self-contained ``report.html`` + text.
 
-``report.json`` is the authoritative detailed artifact; ``report.html`` is the human-facing view.
-The HTML is a single self-contained file (inline CSS/JS, no CDN): each gadget's 3D block-graph link
-and decorated ZX picture sit in their own columns beside the gadget name; every column is
-toggleable; the result badge and observable explain themselves on hover; rows shade on hover; and
-an expandable detail row carries oracle results, circuit links and the LER plot. Optional
-``orjson`` is used for the JSON when present.
+``report.json`` is the authoritative artifact; ``report.html`` is the human-facing view. The HTML is
+a single self-contained file (inline CSS/JS, no CDN) whose shape is driven by the run's config: the
+columns present, the per-oracle column groups, and the MCMC-sampling section all follow what the
+run actually measured. Structure links (3D block graph, decorated ZX) are columns beside the gadget
+name; there is no expand/dropdown. Optional ``orjson`` is used for the JSON when present.
 """
 
 from __future__ import annotations
@@ -42,29 +41,6 @@ _BADGE_TEXT = {
     SIM_FAIL: "sim fail",
 }
 
-# Leaf columns in display order: (key, label, default_visible). Every column is toggleable.
-# name / block_graph / zx are the subcolumns of the "Gadget" group in the two-row header.
-_COL_SPECS: tuple[tuple[str, str, bool], ...] = (
-    ("result", "Result", True),
-    ("name", "Gadget", True),
-    ("block_graph", "3D", True),
-    ("zx", "ZX", True),
-    ("observable", "Observable", True),
-    ("convention", "Convention", True),
-    ("k", "k", True),
-    ("window", "Window", True),
-    ("missing", "Missing parities", True),
-    ("distance", "Distance", True),
-    ("expected", "Expected", False),
-    ("lambda", "Lambda", False),
-    ("runtime", "Runtime (s)", True),
-    ("links", "Links", True),
-    ("notes", "Notes", True),
-    ("source", "Source", False),
-    ("status", "Status", False),
-)
-_NLEAF = len(_COL_SPECS)
-
 
 @dataclass
 class ExperimentRow:
@@ -87,8 +63,6 @@ class ExperimentRow:
     observable: str = ""
     oracle_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     visuals: dict[str, Any] = field(default_factory=dict)
-    ler_plot: str | None = None
-    lambda_factor: float | None = None
     runtime_s: float | None = None
     notes: str = ""
 
@@ -103,7 +77,7 @@ class ExperimentRow:
 
 @dataclass
 class ExperimentReport:
-    """A collection of rows plus JSON / HTML / text / CSV renderers."""
+    """A collection of rows plus JSON / HTML / text renderers."""
 
     rows: list[ExperimentRow] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
@@ -122,8 +96,7 @@ class ExperimentReport:
             "prep_failed": counts[PREP_FAIL],
             "sim_failed": counts[SIM_FAIL],
             "not_scored": counts[NOT_SCORED],
-            # kept for backwards-compatible callers / CLI exit code
-            "predictors_fail": counts[PREDICTOR_FAIL],
+            "predictors_fail": counts[PREDICTOR_FAIL],  # back-compat / CLI exit code
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -159,24 +132,32 @@ class ExperimentReport:
         (out / "report.txt").write_text(self.to_text(), encoding="utf-8")
         return out / "report.json"
 
-    # Plain-text table: readable column names, no abbreviations that need a key.
-    _COLUMNS = (
-        ("status_kind", "result"),
-        ("gadget_id", "gadget"),
-        ("observable", "observable"),
-        ("convention", "convention"),
-        ("k", "k"),
-        ("window", "window"),
-        ("missing_parities", "missing parities"),
-        ("distance", "distance"),
-        ("expected_distance", "expected"),
-    )
+    # ---- plain-text table (console) -----------------------------------------------------------
+    def _text_columns(self) -> list[tuple[str, Any]]:
+        cols: list[tuple[str, Any]] = [
+            ("result", lambda r: r.status_kind),
+            ("gadget", lambda r: r.gadget_id),
+            ("observable", lambda r: r.observable),
+            ("convention", lambda r: r.convention),
+            ("k", lambda r: r.k),
+            ("window", lambda r: r.window),
+            ("missing", lambda r: r.missing_parities),
+            ("distance", lambda r: r.distance),
+            ("expected", lambda r: r.expected_distance),
+            ("runtime", lambda r: r.runtime_s),
+        ]
+        for name in self.meta.get("oracles", []):
+            cols.append(
+                (f"{name}:dist", (lambda n: lambda r: (r.oracle_results.get(n) or {}).get("distance"))(name))
+            )
+        return cols
 
     def to_text(self) -> str:
-        headers = [label for _, label in self._COLUMNS]
+        cols = self._text_columns()
+        headers = [label for label, _ in cols]
         table = [headers]
         for r in self.rows:
-            table.append([_fmt(getattr(r, attr)) for attr, _ in self._COLUMNS])
+            table.append([_fmt(getter(r)) for _, getter in cols])
         widths = [max(len(row[i]) for row in table) for i in range(len(headers))]
         lines = []
         for ridx, row in enumerate(table):
@@ -198,8 +179,177 @@ class ExperimentReport:
             )
         return "\n".join(lines) + footer
 
+    # ---- HTML ---------------------------------------------------------------------------------
+    def _columns(self) -> list[dict[str, Any]]:
+        """The ordered leaf columns for the HTML table -- config-driven, incl. per-oracle groups."""
+        predictors = self.meta.get("predictors", ["parities", "distance"])
+        gv = self.gadget_visuals
+
+        def num(attr: str) -> Any:
+            return lambda r: getattr(r, attr)
+
+        cols: list[dict[str, Any]] = [
+            {"key": "result", "label": "Result", "default": True, "render": _result_cell},
+            {"key": "name", "label": "Name", "group": "gadget", "glabel": "Gadget",
+             "default": True, "sortable": True, "render": _name_cell},
+            {"key": "block_graph", "label": "3D", "group": "gadget", "default": True,
+             "render": lambda r: _block_graph_cell(gv.get(r.gadget_id, {}))},
+            {"key": "zx", "label": "ZX", "group": "gadget", "default": True,
+             "render": lambda r: _zx_cell(gv.get(r.gadget_id, {}))},
+            {"key": "observable", "label": "Observable", "default": True, "sortable": True,
+             "render": lambda r: _text_cell(r.observable)},
+            {"key": "convention", "label": "Convention", "default": True, "sortable": True,
+             "render": lambda r: _text_cell(r.convention)},
+            {"key": "k", "label": "k", "default": True, "numeric": True, "value": num("k")},
+            {"key": "window", "label": "Window", "default": False, "numeric": True, "value": num("window")},
+            {"key": "missing", "label": "Missing parities", "default": "parities" in predictors,
+             "numeric": True, "value": num("missing_parities")},
+            {"key": "distance", "label": "Distance", "default": "distance" in predictors,
+             "numeric": True, "value": num("distance")},
+            {"key": "expected", "label": "Expected", "default": False, "numeric": True,
+             "value": num("expected_distance")},
+            {"key": "runtime", "label": "Runtime (s)", "default": True, "numeric": True,
+             "value": num("runtime_s")},
+            {"key": "links", "label": "Links", "default": True, "render": _links_cell},
+            {"key": "notes", "label": "Notes", "default": True, "sortable": True,
+             "render": lambda r: _text_cell(r.notes)},
+            {"key": "input", "label": "Input", "default": False, "sortable": True,
+             "render": lambda r: _text_cell(r.source)},
+        ]
+        for name in self.meta.get("oracles", []):
+            g = f"oracle:{name}"
+            cols += [
+                {"key": f"{g}:dist", "label": "dist", "group": g, "glabel": name, "mlabel": f"{name} dist",
+                 "default": True, "numeric": True,
+                 "value": (lambda n: lambda r: (r.oracle_results.get(n) or {}).get("distance"))(name)},
+                {"key": f"{g}:eq", "label": "≡", "group": g, "mlabel": f"{name} equivalent",
+                 "default": True, "sortable": True,
+                 "render": (lambda n: lambda r: _eq_cell((r.oracle_results.get(n) or {}).get("equivalent")))(name)},
+                {"key": f"{g}:stim", "label": "stim", "group": g, "mlabel": f"{name} stim", "default": True,
+                 "render": (lambda n: lambda r: _oracle_stim_cell(r.oracle_results.get(n) or {}))(name)},
+            ]
+        return cols
+
+    def _header_html(self, cols: list[dict[str, Any]]) -> str:
+        members: dict[str, list[int]] = {}
+        for idx, col in enumerate(cols):
+            if col.get("group"):
+                members.setdefault(col["group"], []).append(idx)
+
+        def th(idx: int, col: dict[str, Any], rowspan: int) -> str:
+            cls = ' class="num"' if col.get("numeric") else ""
+            rs = f' rowspan="{rowspan}"' if rowspan != 1 else ""
+            sortable = col.get("sortable") or col.get("numeric")
+            label = html.escape(col["label"])
+            inner = f'<button type="button">{label}</button>' if sortable else label
+            sort = ' aria-sort="none"' if sortable else ""
+            return f'<th{cls} data-col="{col["key"]}" data-idx="{idx}"{rs} scope="col"{sort}>{inner}</th>'
+
+        row1, row2, opened = ["<tr>"], ["<tr>"], set()
+        for idx, col in enumerate(cols):
+            group = col.get("group")
+            if not group:
+                row1.append(th(idx, col, rowspan=2))
+                continue
+            if group not in opened:
+                opened.add(group)
+                glabel = html.escape(cols[members[group][0]].get("glabel", group))
+                row1.append(
+                    f'<th class="group" data-col="__group_{group}" colspan="{len(members[group])}" '
+                    f'scope="colgroup">{glabel}</th>'
+                )
+            row2.append(th(idx, col, rowspan=1))
+        row1.append("</tr>")
+        row2.append("</tr>")
+        return "".join(row1) + "\n" + "".join(row2)
+
+    def _row_html(self, cols: list[dict[str, Any]], r: ExperimentRow) -> str:
+        cells = []
+        for col in cols:
+            key = col["key"]
+            if col.get("numeric"):
+                value = col["value"](r)
+                sort = "" if value is None else str(value)
+                cells.append(
+                    f'<td class="num" data-col="{key}" data-sort-value="{html.escape(sort)}">'
+                    f"{html.escape(_fmt(value))}</td>"
+                )
+            else:
+                cells.append(f'<td data-col="{key}">{col["render"](r)}</td>')
+        return (
+            f'<tr class="datarow {r.status_kind}" data-kind="{r.status_kind}" '
+            f'data-gadget="{html.escape(r.gadget_id.lower())}">' + "".join(cells) + "</tr>"
+        )
+
+    def _menu_html(self, cols: list[dict[str, Any]]) -> str:
+        return "".join(
+            f'<label><input type="checkbox" data-colcb="{col["key"]}"/> '
+            f'{html.escape(col.get("mlabel", col["label"]))}</label>'
+            for col in cols
+        )
+
+    def _defaults_json(self, cols: list[dict[str, Any]]) -> str:
+        return json.dumps({col["key"]: bool(col["default"]) for col in cols})
+
+    def _groups_json(self, cols: list[dict[str, Any]]) -> str:
+        groups: dict[str, list[str]] = {}
+        for col in cols:
+            if col.get("group"):
+                groups.setdefault(col["group"], []).append(col["key"])
+        return json.dumps(groups)
+
+    def _top_header(self) -> str:
+        title = html.escape(self.meta.get("name") or "Gadget experiment report")
+        bits = []
+        if self.meta.get("timestamp"):
+            bits.append(f"run {html.escape(self.meta['timestamp'])}")
+        if self.meta.get("config"):
+            bits.append(
+                f'<a class="link" href="{html.escape(self.meta["config"])}" target="_blank" '
+                f'rel="noopener">config.toml</a>'
+            )
+        sub = " &middot; ".join(bits)
+        return f"<h1>{title}</h1>" + (f'<div class="runmeta">{sub}</div>' if sub else "")
+
+    def _mcmc_section(self) -> str:
+        mcmc = self.meta.get("mcmc")
+        if not mcmc or not mcmc.get("enabled"):
+            return ""
+        setup = mcmc.get("setup")
+        setup_link = (
+            f' &middot; <a class="link" href="{html.escape(setup)}" target="_blank" rel="noopener">sampling setup</a>'
+            if setup else ""
+        )
+        head = (
+            f'<p class="muted">Monte-Carlo (sinter) sampling &mdash; aggregate '
+            f'{html.escape(str(mcmc.get("aggregate", "")))}, {mcmc.get("results", 0)} sampled cases'
+            f"{setup_link}</p>"
+        )
+        rows = []
+        for g in mcmc.get("gadgets", []):
+            plot = g.get("plot")
+            plot_cell = (
+                f'<a href="{html.escape(plot)}" target="_blank" rel="noopener">'
+                f'<img class="plotthumb" src="{html.escape(plot)}" alt="LER-vs-p plot"/></a>'
+                if plot else "&ndash;"
+            )
+            lam = g.get("lambda")
+            rows.append(
+                "<tr><td>" + html.escape(g.get("gadget_id", "")) + "</td><td>"
+                + html.escape(g.get("convention", "")) + "</td><td class=\"num\">"
+                + (f"{lam:.3g}" if isinstance(lam, (int, float)) else "&ndash;")
+                + "</td><td>" + plot_cell + "</td></tr>"
+            )
+        return (
+            '<section class="mcmc"><h2>MCMC sampling</h2>' + head
+            + '<div class="wrap"><table><thead><tr><th>Gadget</th><th>Convention</th>'
+            + '<th class="num">Lambda</th><th>LER-vs-p plot</th></tr></thead><tbody>'
+            + "".join(rows) + "</tbody></table></div></section>"
+        )
+
     def to_html(self) -> str:
-        rows_html = "\n".join(self._row_html(i, r) for i, r in enumerate(self.rows))
+        cols = self._columns()
+        rows_html = "\n".join(self._row_html(cols, r) for r in self.rows)
         s = self.summary()
         chips = "".join(
             f'<button class="chip" data-filter="{key}">{label}: <b>{s[key]}</b></button>'
@@ -211,154 +361,19 @@ class ExperimentReport:
                 ("not_scored", "not scored"),
             )
         )
-        has_plots = any(r.ler_plot for r in self.rows)
-        show_plots = "" if has_plots else ' style="display:none"'
-        html_out = _HTML
-        html_out = html_out.replace("__CHIPS__", chips)
-        html_out = html_out.replace("__HEADER__", self._header_html())
-        html_out = html_out.replace("__MENU__", self._menu_html())
-        html_out = html_out.replace("__DEFAULTS__", self._defaults_json())
-        html_out = html_out.replace("__ROWS__", rows_html)
-        html_out = html_out.replace("__SHOWPLOTS__", show_plots)
-        return html_out
-
-    def _row_html(self, index: int, r: ExperimentRow) -> str:
-        gv = self.gadget_visuals.get(r.gadget_id, {})
-        badge = _BADGE_TEXT.get(r.status_kind, r.status_kind or "?")
-        explanation = _result_explanation(r)
-        cells = [
-            # 0 result -- the badge explains its pass/fail condition on hover (item 9)
-            f'<td class="col-result" data-col="result"><span class="badge {r.status_kind}" '
-            f'title="{html.escape(explanation)}">{html.escape(badge)}</span></td>',
-            # 1 gadget name -- clicking it (or the arrow) expands the detail row
-            f'<td class="col-gadget" data-col="name"><button class="expand" aria-expanded="false" '
-            f'aria-controls="d{index}" title="show details">&#9656;</button>'
-            f'<span class="gname" title="{html.escape(r.gadget_id)}">{html.escape(r.gadget_id)}</span></td>',
-            # 2 3D block-graph link, 3 decorated ZX thumbnail -- Gadget subcolumns (item 3)
-            f'<td data-col="block_graph">{_block_graph_cell(gv)}</td>',
-            f'<td data-col="zx">{_zx_cell(gv)}</td>',
-            _text_td(r.observable, "observable"),
-            _text_td(r.convention, "convention"),
-            _num_td(r.k, "k"),
-            _num_td(r.window, "window"),
-            _num_td(r.missing_parities, "missing"),
-            _num_td(r.distance, "distance"),
-            _num_td(r.expected_distance, "expected"),
-            _num_td(r.lambda_factor, "lambda"),
-            _num_td(r.runtime_s, "runtime"),
-            self._links_cell(r),
-            _text_td(r.notes, "notes"),
-            _text_td(r.source, "source"),
-            _text_td(r.status, "status"),
-        ]
-        main = (
-            f'<tr class="datarow {r.status_kind}" data-kind="{r.status_kind}" '
-            f'data-gadget="{html.escape(r.gadget_id.lower())}">'
-            + "".join(cells)
-            + "</tr>"
-        )
-        detail = (
-            f'<tr class="detail" id="d{index}" hidden><td colspan="{_NLEAF}">'
-            + self._detail_html(r, gv)
-            + "</td></tr>"
-        )
-        return main + "\n" + detail
-
-    def _links_cell(self, r: ExperimentRow) -> str:
-        """Compact crumble / stim hyperlinks (the 3D link now has its own Gadget subcolumn)."""
-        v = r.visuals or {}
-        links: list[str] = []
-        if v.get("crumble"):
-            links.append(
-                f'<a class="link" href="{html.escape(v["crumble"])}" target="_blank" '
-                f'rel="noopener" title="open in crumble">crumble</a>'
-            )
-        if v.get("circuit"):
-            links.append(
-                f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" '
-                f'rel="noopener" title="annotated .stim circuit">stim</a>'
-            )
-        inner = " &middot; ".join(links) if links else "&ndash;"
-        return f'<td class="col-links" data-col="links">{inner}</td>'
-
-    def _detail_html(self, r: ExperimentRow, gv: dict[str, Any]) -> str:
-        parts: list[str] = []
-        if r.oracle_results:
-            items = "".join(
-                f"<li>{html.escape(name)}: "
-                f"distance {v.get('distance')} · "
-                f"{'equivalent' if v.get('equivalent') else 'not equivalent'}</li>"
-                for name, v in r.oracle_results.items()
-            )
-            parts.append(f"<div><b>oracles</b><ul>{items}</ul></div>")
-
-        v = r.visuals or {}
-        links: list[str] = []
-        if v.get("crumble"):
-            links.append(
-                f'<a class="link" href="{html.escape(v["crumble"])}" target="_blank" rel="noopener">crumble</a>'
-            )
-        if v.get("circuit"):
-            links.append(
-                f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" rel="noopener">annotated circuit</a>'
-            )
-        if v.get("detector_free"):
-            links.append(
-                f'<a class="link" href="{html.escape(v["detector_free"])}" target="_blank" rel="noopener">detector-free circuit</a>'
-            )
-        if links:
-            parts.append(
-                '<div class="links"><b>circuit</b> ' + " &middot; ".join(links) + "</div>"
-            )
-
-        if r.ler_plot:
-            parts.append(
-                f'<figure class="ler"><figcaption>logical error rate</figcaption><img src="{r.ler_plot}" alt="LER plot"/></figure>'
-            )
-
-        return "".join(parts) or "<p><i>no additional details</i></p>"
-
-    def _header_html(self) -> str:
-        """Two-row header: a Gadget group spanning name / 3D / ZX; every other column is flat."""
-        labels = {key: label for key, label, _ in _COL_SPECS}
-        idx = {key: i for i, (key, _, _) in enumerate(_COL_SPECS)}
-        numeric = {
-            "k", "window", "missing", "distance", "expected", "lambda", "runtime",
-        }
-        unsortable = {"block_graph", "zx", "links"}
-
-        def th(key: str, rowspan: int = 1) -> str:
-            cls = ' class="num"' if key in numeric else ""
-            rs = f' rowspan="{rowspan}"' if rowspan != 1 else ""
-            label = html.escape(labels[key])
-            inner = label if key in unsortable else f'<button type="button">{label}</button>'
-            sort = "" if key in unsortable else ' aria-sort="none"'
-            return f'<th{cls} data-col="{key}" data-idx="{idx[key]}"{rs} scope="col"{sort}>{inner}</th>'
-
-        row1 = [
-            "<tr>",
-            th("result", rowspan=2),
-            '<th class="group" data-col="__group_gadget" colspan="3" scope="colgroup">Gadget</th>',
-        ]
-        for key, _, _ in _COL_SPECS:
-            if key in ("result", "name", "block_graph", "zx"):
-                continue
-            row1.append(th(key, rowspan=2))
-        row1.append("</tr>")
-        row2 = ["<tr>", th("name"), th("block_graph"), th("zx"), "</tr>"]
-        return "".join(row1) + "\n" + "".join(row2)
-
-    def _menu_html(self) -> str:
-        """A checkbox per column so every column is toggleable (item 6)."""
-        return "".join(
-            f'<label><input type="checkbox" data-colcb="{key}"/> {html.escape(label)}</label>'
-            for key, label, _ in _COL_SPECS
-        )
-
-    def _defaults_json(self) -> str:
-        return json.dumps({key: default for key, _, default in _COL_SPECS})
+        out = _HTML
+        out = out.replace("__TOPHEADER__", self._top_header())
+        out = out.replace("__CHIPS__", chips)
+        out = out.replace("__HEADER__", self._header_html(cols))
+        out = out.replace("__MENU__", self._menu_html(cols))
+        out = out.replace("__DEFAULTS__", self._defaults_json(cols))
+        out = out.replace("__GROUPS__", self._groups_json(cols))
+        out = out.replace("__ROWS__", rows_html)
+        out = out.replace("__MCMC__", self._mcmc_section())
+        return out
 
 
+# ---- module cell helpers ----------------------------------------------------------------------
 def _fmt(value: Any) -> str:
     if value is None:
         return "-"
@@ -371,22 +386,24 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
-def _text_td(value: Any, col: str) -> str:
+def _text_cell(value: Any) -> str:
     text = _fmt(value)
-    return f'<td data-col="{col}" title="{html.escape(text)}">{html.escape(text)}</td>'
+    return f'<span title="{html.escape(text)}">{html.escape(text)}</span>'
 
 
-def _num_td(value: Any, col: str) -> str:
-    text = _fmt(value)
-    sort = "" if value is None else str(value)
+def _result_cell(r: ExperimentRow) -> str:
+    badge = _BADGE_TEXT.get(r.status_kind, r.status_kind or "?")
     return (
-        f'<td class="num" data-col="{col}" '
-        f'data-sort-value="{html.escape(sort)}">{html.escape(text)}</td>'
+        f'<span class="badge {r.status_kind}" title="{html.escape(_result_explanation(r))}">'
+        f"{html.escape(badge)}</span>"
     )
 
 
+def _name_cell(r: ExperimentRow) -> str:
+    return f'<span class="gname" title="{html.escape(r.gadget_id)}">{html.escape(r.gadget_id)}</span>'
+
+
 def _block_graph_cell(gv: dict[str, Any]) -> str:
-    """The Gadget "3D" subcolumn: a link to the 3D block-graph viewer, or a dash."""
     href = gv.get("block_graph_html")
     if href:
         return (
@@ -397,7 +414,6 @@ def _block_graph_cell(gv: dict[str, Any]) -> str:
 
 
 def _zx_cell(gv: dict[str, Any]) -> str:
-    """The Gadget "ZX" subcolumn: an inline decorated-ZX thumbnail, a link, or a dash."""
     png = gv.get("zx_png")
     if png:
         return (
@@ -413,17 +429,55 @@ def _zx_cell(gv: dict[str, Any]) -> str:
     return "&ndash;"
 
 
+def _links_cell(r: ExperimentRow) -> str:
+    v = r.visuals or {}
+    links: list[str] = []
+    if v.get("crumble"):
+        links.append(
+            f'<a class="link" href="{html.escape(v["crumble"])}" target="_blank" rel="noopener" '
+            f'title="open in crumble">crumble</a>'
+        )
+    if v.get("circuit"):
+        links.append(
+            f'<a class="link" href="{html.escape(v["circuit"])}" target="_blank" rel="noopener" '
+            f'title="annotated .stim circuit">stim</a>'
+        )
+    if v.get("detector_free"):
+        links.append(
+            f'<a class="link" href="{html.escape(v["detector_free"])}" target="_blank" rel="noopener" '
+            f'title="detector-free .stim circuit">bare</a>'
+        )
+    return " &middot; ".join(links) if links else "&ndash;"
+
+
+def _eq_cell(equivalent: Any) -> str:
+    if equivalent is True:
+        return '<span title="logically equivalent to the experimental annotation">✓</span>'
+    if equivalent is False:
+        return '<span class="bad" title="NOT logically equivalent to the experimental annotation">✗</span>'
+    return "&ndash;"
+
+
+def _oracle_stim_cell(res: dict[str, Any]) -> str:
+    if res.get("error"):
+        return f'<span class="bad" title="{html.escape(str(res["error"]))}">error</span>'
+    stim = res.get("stim")
+    if stim:
+        return (
+            f'<a class="link" href="{html.escape(stim)}" target="_blank" rel="noopener" '
+            f'title="this oracle\'s annotated .stim">stim</a>'
+        )
+    return "&ndash;"
+
+
 def _result_explanation(r: ExperimentRow) -> str:
-    """Plain-language reason for the row's result badge, shown as its hover tooltip (item 9)."""
     if r.status_kind == PASS:
         return (
             f"pass: annotation complete (0 missing parities) and "
             f"distance {r.distance} == expected {r.expected_distance}"
         )
     if r.status_kind == PREDICTOR_FAIL:
-        return "predictor fail: " + (
-            r.notes or "did not reach full distance / parity completeness"
-        )
+        return "predictor fail: " + (r.notes or "did not reach full distance / parity completeness")
     if r.status_kind == PREP_FAIL:
         base = "prep fail: tqec could not prepare this gadget"
         return f"{base} ({r.notes})" if r.notes else base
@@ -440,12 +494,18 @@ _HTML = r"""<!doctype html>
 <title>Gadget experiment report</title>
 <style>
 :root { color-scheme: light dark; --bg:#fff; --fg:#111; --line:#d8dde3; --head:#f6f8fa; --muted:#57606a;
-  --pass:#1a7f37; --pfail:#cf222e; --prep:#9a6700; --skip:#57606a; --sim:#8250df; --accent:#0969da; --hover:#eef1f4; }
+  --pass:#1a7f37; --pfail:#cf222e; --prep:#9a6700; --skip:#57606a; --sim:#8250df; --accent:#0969da;
+  --hover:#eef1f4; --bad:#cf222e; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --line:#30363d; --head:#161b22;
-  --muted:#8b949e; --pass:#3fb950; --pfail:#f85149; --prep:#d29922; --skip:#8b949e; --sim:#a371f7; --accent:#58a6ff; --hover:#1b2129; } }
+  --muted:#8b949e; --pass:#3fb950; --pfail:#f85149; --prep:#d29922; --skip:#8b949e; --sim:#a371f7;
+  --accent:#58a6ff; --hover:#1b2129; --bad:#f85149; } }
 * { box-sizing: border-box; }
-body { font-family: ui-sans-serif, system-ui, sans-serif; margin: clamp(.5rem, 2vw, 2rem); background: var(--bg); color: var(--fg); }
-h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
+html, body { max-width: 100%; overflow-x: hidden; }
+body { font-family: ui-sans-serif, system-ui, sans-serif; margin: clamp(.5rem, 2vw, 1.5rem); background: var(--bg); color: var(--fg); }
+h1 { font-size: 1.3rem; margin: 0 0 .15rem; }
+h2 { font-size: 1.05rem; margin: 1.2rem 0 .3rem; }
+.runmeta { color: var(--muted); font-size: .85rem; margin-bottom: .5rem; }
+.muted { color: var(--muted); font-size: .85rem; }
 caption { text-align: left; color: var(--muted); font-size: .85rem; padding: .25rem 0 .5rem; }
 .bar { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; }
 .chip { border: 1px solid var(--line); background: var(--head); color: var(--fg); border-radius: 999px;
@@ -457,36 +517,31 @@ caption { text-align: left; color: var(--muted); font-size: .85rem; padding: .25
 .seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
 details.cols summary { cursor: pointer; }
-details.cols .menu { display: flex; flex-direction: column; gap: .2rem; padding: .4rem; border: 1px solid var(--line); border-radius: 6px; margin-top: .3rem; }
-.switch { display: inline-flex; gap: .35rem; align-items: center; }
-.wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+details.cols .menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .2rem;
+  padding: .4rem; border: 1px solid var(--line); border-radius: 6px; margin-top: .3rem; max-height: 16rem; overflow: auto; }
+.wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: .35rem .55rem; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { background: var(--head); position: sticky; top: 0; z-index: 2; }
 th button { all: unset; cursor: pointer; font-weight: 600; }
 th[aria-sort=ascending] button::after { content: " \25B2"; } th[aria-sort=descending] button::after { content: " \25BC"; }
-td.num, th.num { text-align: right; }
 th.group { text-align: center; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+td.num, th.num { text-align: right; }
 tbody tr.datarow:hover > td { background: var(--hover); }
-.zxthumb { max-height: 2.6rem; width: auto; border: 1px solid var(--line); background: #fff; vertical-align: middle; cursor: zoom-in; }
-.hidden-col { display: none !important; }
-.gname { cursor: pointer; display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.gname { display: inline-block; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .badge { font-size: .72rem; padding: .1rem .45rem; border-radius: 999px; color: #fff; }
 .badge.pass { background: var(--pass); } .badge.predictor_fail { background: var(--pfail); }
 .badge.prep_fail { background: var(--prep); } .badge.not_scored { background: var(--skip); } .badge.sim_fail { background: var(--sim); }
-button.expand { all: unset; cursor: pointer; color: var(--muted); margin-right: .3rem; }
-button.expand[aria-expanded=true] { transform: rotate(90deg); display: inline-block; }
-tr.detail td { background: var(--head); white-space: normal; }
-tr.detail .pics { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
-tr.detail figure { margin: .3rem 0; } tr.detail img, tr.detail svg { max-width: 22rem; height: auto; border: 1px solid var(--line); background: #fff; }
-tr.detail figcaption { font-size: .8rem; color: var(--muted); }
-.link { color: var(--accent); } .col-links a { margin-right: .4rem; white-space: nowrap; }
-.notes { margin: .2rem 0; }
+.link { color: var(--accent); } td .link { margin-right: .3rem; }
+.bad { color: var(--bad); }
+.zxthumb { max-height: 2.6rem; width: auto; border: 1px solid var(--line); background: #fff; vertical-align: middle; cursor: zoom-in; }
+.plotthumb { max-height: 7rem; width: auto; border: 1px solid var(--line); background: #fff; }
+.hidden-col { display: none !important; }
 #announce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
 </head>
 <body>
-<h1>Gadget experiment report</h1>
+__TOPHEADER__
 <div class="bar">__CHIPS__</div>
 
 <div class="controls">
@@ -499,49 +554,31 @@ tr.detail figcaption { font-size: .8rem; color: var(--muted); }
   <details class="cols"><summary>Columns</summary>
     <div class="menu">__MENU__</div>
   </details>
-  <label class="switch"__SHOWPLOTS__><input type="checkbox" id="plots" checked/> Show plots</label>
 </div>
 
 <div class="wrap" tabindex="0">
 <table id="t">
-<caption>One row per (gadget, convention, k, window). Click a header to sort; click a gadget name to expand its details. Use Columns to show or hide any column.</caption>
+<caption>One row per (gadget, convention, k, window). Click a header to sort; use Columns to show or hide any column.</caption>
 <thead>__HEADER__</thead>
 <tbody>
 __ROWS__
 </tbody>
 </table>
 </div>
+
+__MCMC__
 <div id="announce" aria-live="polite"></div>
 
 <script>
-const KEY = "experiment-report-v1";
+const KEY = "experiment-report-v2";
 const state = JSON.parse(localStorage.getItem(KEY) || "{}");
 const table = document.getElementById("t");
 const tb = table.tBodies[0];
-const announce = document.getElementById("announce");
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
 
-function pairs() {
-  const out = [];
-  const rows = [...tb.rows];
-  for (let i = 0; i < rows.length; i += 2) out.push([rows[i], rows[i + 1]]);
-  return out;
-}
-
-// expand / collapse a row's detail
-tb.addEventListener("click", (e) => {
-  let btn = e.target.closest("button.expand");
-  if (!btn && e.target.closest(".gname")) btn = e.target.closest("tr").querySelector("button.expand");
-  if (!btn) return;
-  const detail = document.getElementById(btn.getAttribute("aria-controls"));
-  const open = btn.getAttribute("aria-expanded") === "true";
-  btn.setAttribute("aria-expanded", String(!open));
-  detail.hidden = open;
-});
-
-// column visibility -- every column toggleable; the Gadget group's colspan tracks visible members.
-// Uses a class with !important (not inline display) so re-showing a default-hidden column works.
+// column visibility -- every column toggleable; a group header's colspan tracks its visible members.
 const DEFAULTS = __DEFAULTS__;
-const GROUPS = { gadget: ['name', 'block_graph', 'zx'] };
+const GROUPS = __GROUPS__;
 state.cols = state.cols || {};
 for (const k in DEFAULTS) if (!(k in state.cols)) state.cols[k] = DEFAULTS[k];
 function colVisible(c) { return state.cols[c] !== false; }
@@ -574,19 +611,11 @@ function matches(row) {
   const text = row.getAttribute("data-gadget");
   const okSeg = seg === "all" ? true
     : seg === "failed" ? (kind === "predictor_fail" || kind === "prep_fail" || kind === "sim_fail")
-    : kind === "not_scored";
-  const okQ = !q.value || text.includes(q.value.toLowerCase());
+    : seg === "not_scored" ? kind === "not_scored" : true;
+  const okQ = !state.q || text.indexOf(state.q.toLowerCase()) >= 0;
   return okSeg && okQ;
 }
-function applyFilter() {
-  let shown = 0;
-  for (const [row, detail] of pairs()) {
-    const on = matches(row);
-    row.hidden = !on; if (!on) detail.hidden = true;
-    if (on) shown++;
-  }
-  announce.textContent = shown + " rows shown";
-}
+function applyFilter() { [...tb.rows].forEach(r => { r.hidden = !matches(r); }); }
 q.addEventListener("input", () => { state.q = q.value; save(); applyFilter(); });
 document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
   seg = b.getAttribute('data-seg');
@@ -602,17 +631,16 @@ document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () =
   state.seg = seg; save(); applyFilter();
 }));
 
-// sorting via header buttons; body cells follow data-idx order regardless of the grouped header
-table.querySelectorAll('thead th[data-idx]').forEach(th => {
-  const btn = th.querySelector('button');
-  if (!btn) return;
+// sorting by header buttons; body cells follow data-idx order
+table.querySelectorAll('thead th[data-idx] button').forEach(btn => {
+  const th = btn.closest('th');
   const i = parseInt(th.getAttribute('data-idx'), 10);
   btn.addEventListener('click', () => {
     const asc = th.getAttribute('aria-sort') !== 'ascending';
     table.querySelectorAll('thead th').forEach(x => x.setAttribute('aria-sort', 'none'));
     th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
-    const rows = pairs();
-    rows.sort(([a], [b]) => {
+    const rs = [...tb.rows];
+    rs.sort((a, b) => {
       const ca = a.cells[i], cb = b.cells[i];
       const va = ca.getAttribute('data-sort-value'), vb = cb.getAttribute('data-sort-value');
       const na = parseFloat(va), nb = parseFloat(vb);
@@ -620,20 +648,12 @@ table.querySelectorAll('thead th[data-idx]').forEach(th => {
       const cmp = bothNum ? na - nb : (ca.innerText).localeCompare(cb.innerText);
       return asc ? cmp : -cmp;
     });
-    rows.forEach(([r, d]) => { tb.appendChild(r); tb.appendChild(d); });
-    announce.textContent = 'sorted by ' + th.innerText.trim() + ' ' + (asc ? 'ascending' : 'descending');
+    rs.forEach(r => tb.appendChild(r));
   });
 });
 
-// show/hide plots
-const plots = document.getElementById("plots");
-if (state.plots === false) plots.checked = false;
-function applyPlots() { document.querySelectorAll('figure.ler').forEach(f => f.style.display = plots.checked ? '' : 'none'); }
-plots.addEventListener('change', () => { state.plots = plots.checked; save(); applyPlots(); });
-
-function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
 document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x.getAttribute('data-seg') === seg)));
-applyCols(); applyFilter(); applyPlots();
+applyCols(); applyFilter();
 </script>
 </body>
 </html>

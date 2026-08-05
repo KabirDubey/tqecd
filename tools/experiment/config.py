@@ -13,6 +13,22 @@ from pathlib import Path
 from typing import Any
 
 
+def _toml_value(value: Any) -> str | None:
+    """Render a scalar/list as a TOML value, or ``None`` to omit (TOML has no null)."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, (list, tuple)):
+        items = [_toml_value(v) for v in value]
+        return "[" + ", ".join(i for i in items if i is not None) + "]"
+    return '"' + str(value) + '"'
+
+
 @dataclass(frozen=True)
 class SimulationConfig:
     """Optional gold-standard simulation (LER / Lambda). Off by default."""
@@ -123,6 +139,22 @@ class ExperimentConfig:
             "circuit_mode": self.circuit_mode,
             "simulation": self.simulation.to_dict(),
         }
+
+    def to_toml(self) -> str:
+        """Render the config as ``[experiment]`` TOML (round-trips through :meth:`from_toml`)."""
+        data = self.to_dict()
+        simulation = data.pop("simulation")
+        lines = ["[experiment]"]
+        for key, value in data.items():
+            rendered = _toml_value(value)
+            if rendered is not None:
+                lines.append(f"{key} = {rendered}")
+        lines += ["", "[experiment.simulation]"]
+        for key, value in simulation.items():
+            rendered = _toml_value(value)
+            if rendered is not None:
+                lines.append(f"{key} = {rendered}")
+        return "\n".join(lines) + "\n"
 
     # construction
     @classmethod

@@ -1,0 +1,15 @@
+# Compare detector annotators on the spatial Z and X junctions, where tqecd's windowed
+# completion pass regresses at k>=2. The experimental subject is tqecd's windowed
+# annotate_detectors_automatically; the oracles are alternate annotators scored side by side:
+#   native      -- tqec's own subtemplate matching (the circuit prepare_batch wrote)
+#   tqecd_main  -- main-branch (windowless) tqecd, run out-of-process
+# Run it (the config defines its own inputs -- no --gallery needed):
+#   python -m tools.experiment --config tools/experiment/configs/spatial_junction_comparison.toml
+[experiment]
+name = "Spatial junction: tqecd windowing vs native vs main-branch tqecd"
+inputs = ["spatial_junctions"]
+conventions = ["fixed_bulk"]
+ks = [1, 2]
+windows = [2]
+predictors = ["parities", "distance"]
+oracles = ["native", "tqecd_main"]
