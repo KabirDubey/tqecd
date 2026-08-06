@@ -30,6 +30,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback
 PASS = "pass"
 PREDICTOR_FAIL = "predictor_fail"
 PREP_FAIL = "prep_fail"
+ANNOTATE_FAIL = "annotate_fail"
 NOT_SCORED = "not_scored"
 SIM_FAIL = "sim_fail"
 
@@ -37,6 +38,7 @@ _BADGE_TEXT = {
     PASS: "pass",
     PREDICTOR_FAIL: "predictor fail",
     PREP_FAIL: "prep fail",
+    ANNOTATE_FAIL: "annotate fail",
     NOT_SCORED: "not scored",
     SIM_FAIL: "sim fail",
 }
@@ -84,7 +86,7 @@ class ExperimentReport:
     gadget_visuals: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def summary(self) -> dict[str, int]:
-        counts = {PASS: 0, PREDICTOR_FAIL: 0, PREP_FAIL: 0, NOT_SCORED: 0, SIM_FAIL: 0}
+        counts = {PASS: 0, PREDICTOR_FAIL: 0, PREP_FAIL: 0, ANNOTATE_FAIL: 0, NOT_SCORED: 0, SIM_FAIL: 0}
         for row in self.rows:
             counts[row.status_kind] = counts.get(row.status_kind, 0) + 1
         scored = counts[PASS] + counts[PREDICTOR_FAIL]
@@ -94,9 +96,11 @@ class ExperimentReport:
             "passed": counts[PASS],
             "predictor_failed": counts[PREDICTOR_FAIL],
             "prep_failed": counts[PREP_FAIL],
+            "annotate_failed": counts[ANNOTATE_FAIL],
             "sim_failed": counts[SIM_FAIL],
             "not_scored": counts[NOT_SCORED],
-            "predictors_fail": counts[PREDICTOR_FAIL],  # back-compat / CLI exit code
+            # nonzero -> CLI failure exit; a tqecd crash counts as a failure like a predictor miss
+            "predictors_fail": counts[PREDICTOR_FAIL] + counts[ANNOTATE_FAIL],
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -174,8 +178,8 @@ class ExperimentReport:
         s = self.summary()
         footer = (
             f"\n{s['passed']}/{s['scored']} scored gadgets passed "
-            f"({s['predictor_failed']} predictor failures, {s['prep_failed']} prep failures, "
-            f"{s['not_scored']} not scored)"
+            f"({s['predictor_failed']} predictor failures, {s['annotate_failed']} annotate failures, "
+            f"{s['prep_failed']} prep failures, {s['not_scored']} not scored)"
         )
         runtimes = [r.runtime_s for r in self.rows if r.runtime_s is not None]
         if runtimes:
@@ -509,6 +513,7 @@ class ExperimentReport:
                 ("rows", "rows"),
                 ("passed", "passed"),
                 ("predictor_failed", "predictor failures"),
+                ("annotate_failed", "annotate failures"),
                 ("prep_failed", "prep failures"),
                 ("not_scored", "not scored"),
             )
@@ -639,6 +644,8 @@ def _result_explanation(r: ExperimentRow) -> str:
     if r.status_kind == PREP_FAIL:
         base = "prep fail: tqec could not prepare this gadget"
         return f"{base} ({r.notes})" if r.notes else base
+    if r.status_kind == ANNOTATE_FAIL:
+        return "annotate fail: tqecd raised while re-annotating this circuit -- " + (r.notes or "see Notes")
     if r.status_kind == SIM_FAIL:
         return "sim fail: the simulation stage failed for this row"
     return "not scored: no predictors were run for this row"
@@ -653,10 +660,10 @@ _HTML = r"""<!doctype html>
 <style>
 :root { color-scheme: light dark; --bg:#fff; --fg:#111; --line:#d8dde3; --head:#f6f8fa; --muted:#57606a;
   --pass:#1a7f37; --pfail:#cf222e; --prep:#9a6700; --skip:#57606a; --sim:#8250df; --accent:#0969da;
-  --hover:#eef1f4; --bad:#cf222e; }
+  --hover:#eef1f4; --bad:#cf222e; --afail:#bf3989; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --line:#30363d; --head:#161b22;
   --muted:#8b949e; --pass:#3fb950; --pfail:#f85149; --prep:#d29922; --skip:#8b949e; --sim:#a371f7;
-  --accent:#58a6ff; --hover:#1b2129; --bad:#f85149; } }
+  --accent:#58a6ff; --hover:#1b2129; --bad:#f85149; --afail:#db61a2; } }
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
 body { font-family: ui-sans-serif, system-ui, sans-serif; margin: clamp(.5rem, 2vw, 1.5rem); background: var(--bg); color: var(--fg); }
@@ -690,6 +697,7 @@ tbody tr.datarow:hover > td { background: var(--hover); }
 .badge { font-size: .72rem; padding: .1rem .45rem; border-radius: 999px; color: #fff; }
 .badge.pass { background: var(--pass); } .badge.predictor_fail { background: var(--pfail); }
 .badge.prep_fail { background: var(--prep); } .badge.not_scored { background: var(--skip); } .badge.sim_fail { background: var(--sim); }
+.badge.annotate_fail { background: var(--afail); }
 .link { color: var(--accent); } td .link { margin-right: .3rem; }
 .bad { color: var(--bad); }
 .zxthumb { max-height: 2.6rem; width: auto; border: 1px solid var(--line); background: #fff; vertical-align: middle; cursor: zoom-in; }
@@ -768,7 +776,7 @@ function matches(row) {
   const kind = row.getAttribute("data-kind");
   const text = row.getAttribute("data-gadget");
   const okSeg = seg === "all" ? true
-    : seg === "failed" ? (kind === "predictor_fail" || kind === "prep_fail" || kind === "sim_fail")
+    : seg === "failed" ? (kind === "predictor_fail" || kind === "prep_fail" || kind === "sim_fail" || kind === "annotate_fail")
     : seg === "not_scored" ? kind === "not_scored" : true;
   const okQ = !state.q || text.indexOf(state.q.toLowerCase()) >= 0;
   return okSeg && okQ;

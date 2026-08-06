@@ -34,7 +34,22 @@ def test_summary_counts():
     s = _report().summary()
     assert s["rows"] == 2 and s["scored"] == 1
     assert s["passed"] == 1 and s["predictor_failed"] == 0 and s["prep_failed"] == 1
-    assert s["not_scored"] == 0 and s["predictors_fail"] == 0
+    assert s["not_scored"] == 0 and s["predictors_fail"] == 0 and s["annotate_failed"] == 0
+
+
+def test_annotate_fail_row_is_counted_and_rendered():
+    # a tqecd crash on a row -> annotate_fail badge, counted, and folded into the CLI exit code
+    r = _report()
+    r.rows.append(
+        ExperimentRow(
+            gadget_id="gx", source="mem", name="y", convention="fixed_bulk", k=1, window=2,
+            status="ready", status_kind="annotate_fail", notes="TQECDException: boundary mismatch",
+        )
+    )
+    s = r.summary()
+    assert s["annotate_failed"] == 1 and s["predictors_fail"] == 1  # counts toward failure exit
+    html = r.to_html()
+    assert "annotate fail" in html and "TQECDException: boundary mismatch" in html
 
 
 def test_write_produces_all_artifacts(tmp_path):

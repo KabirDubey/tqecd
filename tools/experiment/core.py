@@ -22,6 +22,7 @@ import stim
 from tools.experiment import annotators, predictors, runlog, visuals
 from tools.experiment.config import ExperimentConfig
 from tools.experiment.report import (
+    ANNOTATE_FAIL,
     NOT_SCORED,
     PASS,
     PREDICTOR_FAIL,
@@ -138,7 +139,11 @@ def _score_oracles(
         except Exception as exc:  # a missing worktree / subprocess failure is recorded, not fatal
             row.oracle_results[name] = {"error": str(exc)[:200]}
             continue
-        res: dict[str, Any] = {"equivalent": logically_equivalent(reannotated, circuit)}
+        res: dict[str, Any] = {
+            "equivalent": (
+                logically_equivalent(reannotated, circuit) if reannotated is not None else None
+            )
+        }
         if config.run_parities:
             res["missing_parities"] = predictors.count_missing_parities(circuit)
         if config.run_distance:
@@ -167,6 +172,22 @@ def _prep_row(unit: Any) -> ExperimentRow:
         status=status,
         status_kind=_status_kind(status, None),
         notes=getattr(unit, "error", "") or getattr(unit, "notes", ""),
+    )
+
+
+def _annotate_fail_row(unit: Any, k: int, window: int, exc: BaseException) -> ExperimentRow:
+    """A scored row whose ``tqecd`` re-annotation raised -- recorded so one crash isn't fatal."""
+    return ExperimentRow(
+        gadget_id=unit.gadget_id,
+        source=getattr(unit, "source", ""),
+        name=getattr(unit, "name", ""),
+        convention=unit.convention,
+        k=k,
+        window=window,
+        status=unit.status,
+        status_kind=ANNOTATE_FAIL,
+        observable=_observable_label(unit),
+        notes=f"{type(exc).__name__}: {str(exc).splitlines()[0][:200]}",
     )
 
 
@@ -365,11 +386,17 @@ def _score_and_render(
 
     for unit, k, native, window in iterator:
         started = time.perf_counter()
-        reannotated = annotators.reannotate(native, window=window)
-        row = _score(native, reannotated, unit, k, window, config)
-        row.runtime_s = time.perf_counter() - started
-        _score_oracles(row, reannotated, unit, k, native, config, oracles, artifacts, out_dir)
-        _attach_visuals(row, native, reannotated, artifacts, out_dir)
+        try:
+            reannotated = annotators.reannotate(native, window=window)
+            row = _score(native, reannotated, unit, k, window, config)
+            row.runtime_s = time.perf_counter() - started
+            _score_oracles(row, reannotated, unit, k, native, config, oracles, artifacts, out_dir)
+            _attach_visuals(row, native, reannotated, artifacts, out_dir)
+        except Exception as exc:  # a tqecd crash on a hard gadget is recorded, not fatal
+            row = _annotate_fail_row(unit, k, window, exc)
+            row.runtime_s = time.perf_counter() - started
+            # the native oracle only needs the native circuit, so still show the generator's distance
+            _score_oracles(row, None, unit, k, native, config, oracles, artifacts, out_dir)
         rows.append(row)
         log.info(
             "score %s [%s] k=%s w=%s missing=%s dist=%s pass=%s",
@@ -653,8 +680,8 @@ def _print_console_summary(
     html_path = (out_dir / "report.html").resolve()
     print(
         f"\n{s['passed']}/{s['scored']} scored gadgets passed; "
-        f"{s['prep_failed']} prep failures, {s['not_scored']} not scored. "
-        f"log: {log_path}",
+        f"{s['annotate_failed']} annotate failures, {s['prep_failed']} prep failures, "
+        f"{s['not_scored']} not scored. log: {log_path}",
         file=sys.stderr,
     )
     print(f"to see the report in your browser run: open {html_path}", file=sys.stderr)
