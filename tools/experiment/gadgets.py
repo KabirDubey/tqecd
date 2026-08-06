@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 _FILE_SUFFIXES = (".dae", ".bgraph")
+_DATA_DIR = Path(__file__).resolve().parent / "gadgets"
 
 
 def gallery_builders() -> dict[str, Callable[[], Any]]:
@@ -108,10 +109,22 @@ def spatial_junctions() -> list[Any]:
     ]
 
 
+def y_half_cube() -> list[str]:
+    """The 16 y-half-cube gadgets bundled from the gadgetTesting prototype (``.bgraph`` paths).
+
+    ``g01``..``g12`` (the y-half-cube DAE components), ``s_gate_{x,y,z}`` (S-gate teleportation via
+    a Y cube), and ``ymem_y_init_y_meas`` (Y-basis memory). Returned as file paths -- ``tqec`` reads
+    each ``.bgraph`` -- so scoring them exercises whatever y-half-cube circuit generator the active
+    ``tqec`` provides.
+    """
+    return sorted(str(p) for p in (_DATA_DIR / "y_half_cube").glob("*.bgraph"))
+
+
 #: Tool-provided gadget batches -- families the tester supplies itself (not from ``tqec.gallery``).
 NAMED_BATCHES: dict[str, Callable[[], list[Any]]] = {
     "hadamard_arrangements": hadamard_arrangements,
     "spatial_junctions": spatial_junctions,
+    "y_half_cube": y_half_cube,
 }
 
 

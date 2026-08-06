@@ -52,6 +52,21 @@ def _assert_all_ready_pass(report):
     return ready
 
 
+# the 16 y-half-cube gadgets from the gadgetTesting prototype are bundled and resolve as inputs
+def test_y_half_cube_batch_resolves_to_16_bgraphs():
+    from pathlib import Path
+
+    from tools.experiment import gadgets
+
+    paths = gadgets.y_half_cube()
+    assert len(paths) == 16
+    assert all(p.endswith(".bgraph") and Path(p).is_file() for p in paths)
+    names = {Path(p).stem for p in paths}
+    assert {"s_gate_x", "s_gate_y", "s_gate_z", "ymem_y_init_y_meas"} <= names
+    assert sum(n.startswith("g") for n in names) == 12  # g01..g12
+    assert len(gadgets.resolve_inputs(["y_half_cube"])) == 16
+
+
 # reannotate() on a real prepared gadget preserves observables and attaches completely
 def test_reannotate_real_gadget(out_dir):
     manifest = prepare_batch(
