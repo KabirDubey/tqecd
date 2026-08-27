@@ -1,0 +1,20 @@
+# Fast iteration config for the y-half-cube work: the 16 gadgets, fixed_bulk only, k=1 and k=2.
+#
+# - fixed_bulk only: the generator raises NotImplementedError for fixed_boundary, so including it
+#   only adds 16 prep_fail rows and doubles the runtime.
+# - k=[1,2]: k=1 emits no REPEAT blocks and k=2 is the smallest k that does, so this pair covers
+#   both annotation paths while staying quick. Bump to [1,2,3] for a full confirmation run.
+# - oracles=["native"]: compare the tqecd annotation under test against the generator's own
+#   (native) annotation only -- no lightStim / stimflow.
+#
+# Run against the demo/yorchestration tqec (y-cube generator + orchestration):
+#   PYTHONPATH=<tqec_yorchestration>/src uv run python -m tools.experiment \
+#       --config tools/experiment/configs/y_half_cube_bulk_only.toml
+[experiment]
+name = "y half cube (fixed_bulk, k=1,2): generator vs tqecd annotation"
+inputs = ["y_half_cube"]
+conventions = ["fixed_bulk"]
+ks = [1, 2]
+windows = [2]
+predictors = ["parities", "distance"]
+oracles = ["native"]

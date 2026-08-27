@@ -1,0 +1,11 @@
+# Full confirmation run for the y-half-cube work: all 16 gadgets, fixed_bulk, k=1,2,3.
+# Same as y_half_cube_bulk_only.toml but with k=3 included -- slower, use for sign-off rather than
+# for iteration.
+[experiment]
+name = "y half cube (fixed_bulk, k=1,2,3): generator vs tqecd annotation"
+inputs = ["y_half_cube"]
+conventions = ["fixed_bulk"]
+ks = [1, 2, 3]
+windows = [2]
+predictors = ["parities", "distance"]
+oracles = ["native"]
