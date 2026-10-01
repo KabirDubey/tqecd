@@ -9,7 +9,9 @@ import pytest
 # (sets TQEC_DETECTOR_DATABASE_PATH) before the importorskip below pulls tqec in.
 import tools.experiment  # noqa: F401,E402
 
-pytest.importorskip("tqec.orchestration", reason="experiment tests need the optional tqec dep")
+pytest.importorskip(
+    "tqec.orchestration", reason="experiment tests need the optional tqec dep"
+)
 
 
 @pytest.fixture

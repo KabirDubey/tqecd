@@ -159,5 +159,7 @@ def resolve_inputs(specs: Sequence[str]) -> list[Any]:
             out.append(builders[spec]())
         else:
             choices = sorted({*builders, *NAMED_BATCHES, "all"})
-            raise ValueError(f"unknown input {spec!r}; choose from {choices} or a .dae/.bgraph path")
+            raise ValueError(
+                f"unknown input {spec!r}; choose from {choices} or a .dae/.bgraph path"
+            )
     return out

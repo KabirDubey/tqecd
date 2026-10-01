@@ -25,20 +25,22 @@ def _isolate_detector_db() -> None:
     variable when the user has not already chosen one (``setdefault``).
     """
     default = _Path.home() / ".cache" / "tqec-experiment" / "detector_database.pkl"
-    if _os.environ.setdefault("TQEC_DETECTOR_DATABASE_PATH", str(default)) == str(default):
+    if _os.environ.setdefault("TQEC_DETECTOR_DATABASE_PATH", str(default)) == str(
+        default
+    ):
         default.parent.mkdir(parents=True, exist_ok=True)
 
 
 _isolate_detector_db()
 
-from tools.experiment.config import ExperimentConfig, SimulationConfig
-from tools.experiment.core import (
+from tools.experiment.config import ExperimentConfig, SimulationConfig  # noqa: E402
+from tools.experiment.core import (  # noqa: E402
     reannotate_run,
     render_report,
     run_experiment,
     simulate_run,
 )
-from tools.experiment.report import ExperimentReport, ExperimentRow
+from tools.experiment.report import ExperimentReport, ExperimentRow  # noqa: E402
 
 __all__ = [
     "ExperimentConfig",

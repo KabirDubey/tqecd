@@ -23,7 +23,11 @@ def test_gf2_rank_basic():
     # xor-dependent vectors ({0} ^ {1} = {0,1}) -> rank 2
     assert (
         _gf2_rank(
-            [_records_to_vector([0]), _records_to_vector([1]), _records_to_vector([0, 1])]
+            [
+                _records_to_vector([0]),
+                _records_to_vector([1]),
+                _records_to_vector([0, 1]),
+            ]
         )
         == 2
     )

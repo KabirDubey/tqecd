@@ -136,12 +136,16 @@ def _score_oracles(
         name = oracle.name
         try:
             circuit = oracle.annotate(unit, k, native)
-        except Exception as exc:  # a missing worktree / subprocess failure is recorded, not fatal
+        except (
+            Exception
+        ) as exc:  # a missing worktree / subprocess failure is recorded, not fatal
             row.oracle_results[name] = {"error": str(exc)[:200]}
             continue
         res: dict[str, Any] = {
             "equivalent": (
-                logically_equivalent(reannotated, circuit) if reannotated is not None else None
+                logically_equivalent(reannotated, circuit)
+                if reannotated is not None
+                else None
             )
         }
         if config.run_parities:
@@ -175,7 +179,9 @@ def _prep_row(unit: Any) -> ExperimentRow:
     )
 
 
-def _annotate_fail_row(unit: Any, k: int, window: int, exc: BaseException) -> ExperimentRow:
+def _annotate_fail_row(
+    unit: Any, k: int, window: int, exc: BaseException
+) -> ExperimentRow:
     """A scored row whose ``tqecd`` re-annotation raised -- recorded so one crash isn't fatal."""
     return ExperimentRow(
         gadget_id=unit.gadget_id,
@@ -390,13 +396,19 @@ def _score_and_render(
             reannotated = annotators.reannotate(native, window=window)
             row = _score(native, reannotated, unit, k, window, config)
             row.runtime_s = time.perf_counter() - started
-            _score_oracles(row, reannotated, unit, k, native, config, oracles, artifacts, out_dir)
+            _score_oracles(
+                row, reannotated, unit, k, native, config, oracles, artifacts, out_dir
+            )
             _attach_visuals(row, native, reannotated, artifacts, out_dir)
-        except Exception as exc:  # a tqecd crash on a hard gadget is recorded, not fatal
+        except (
+            Exception
+        ) as exc:  # a tqecd crash on a hard gadget is recorded, not fatal
             row = _annotate_fail_row(unit, k, window, exc)
             row.runtime_s = time.perf_counter() - started
             # the native oracle only needs the native circuit, so still show the generator's distance
-            _score_oracles(row, None, unit, k, native, config, oracles, artifacts, out_dir)
+            _score_oracles(
+                row, None, unit, k, native, config, oracles, artifacts, out_dir
+            )
         rows.append(row)
         log.info(
             "score %s [%s] k=%s w=%s missing=%s dist=%s pass=%s",
@@ -468,7 +480,9 @@ def run_experiment(
     if not inputs and config.inputs:
         from tools.experiment import gadgets
 
-        inputs = gadgets.resolve_inputs(config.inputs)  # the config defines its own inputs
+        inputs = gadgets.resolve_inputs(
+            config.inputs
+        )  # the config defines its own inputs
     log, log_path = runlog.make_logger(out_dir)
     log.info(
         "start: conventions=%s ks=%s windows=%s inputs=%d",

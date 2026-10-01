@@ -102,7 +102,9 @@ def main(argv: list[str] | None = None) -> int:
         avail = gadgets.available_inputs()
         print("gallery gadgets:", ", ".join(avail["gallery"]))
         print("tool batches: ", ", ".join(avail["batches"]))
-        print("'all' runs every canonical gallery gadget:", ", ".join(gadgets.GALLERY_ALL))
+        print(
+            "'all' runs every canonical gallery gadget:", ", ".join(gadgets.GALLERY_ALL)
+        )
         return 0
 
     if args.clean is not None:
@@ -139,7 +141,10 @@ def main(argv: list[str] | None = None) -> int:
         run_dir = Path(args.render)
         html_path = (run_dir if run_dir.is_dir() else run_dir.parent) / "report.html"
         print("re-rendered report.html from report.json", file=sys.stderr)
-        print(f"to see it in your browser run: open {html_path.resolve()}", file=sys.stderr)
+        print(
+            f"to see it in your browser run: open {html_path.resolve()}",
+            file=sys.stderr,
+        )
         s = report.summary()
         return 0 if s["predictors_fail"] == 0 else 1
 
@@ -176,7 +181,9 @@ def main(argv: list[str] | None = None) -> int:
         s = report.summary()
         return 0 if s["predictors_fail"] == 0 else 1
 
-    config = ExperimentConfig.from_toml(args.config) if args.config else ExperimentConfig()
+    config = (
+        ExperimentConfig.from_toml(args.config) if args.config else ExperimentConfig()
+    )
 
     overrides: dict[str, Any] = {}
     if args.k:
@@ -203,7 +210,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from None
 
-    report = run_experiment(inputs, config, args.out)  # prints the console summary + open hint
+    report = run_experiment(
+        inputs, config, args.out
+    )  # prints the console summary + open hint
     s = report.summary()
     return 0 if s["predictors_fail"] == 0 else 1
 

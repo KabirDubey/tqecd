@@ -15,7 +15,7 @@ def _toml_value(value: Any) -> str | None:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
-        return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
     if isinstance(value, (int, float)):
         return repr(value)
     if isinstance(value, (list, tuple)):
@@ -38,7 +38,7 @@ class SimulationConfig:
     lambda_factor: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "SimulationConfig":
+    def from_dict(cls, data: dict[str, Any]) -> SimulationConfig:
         known = {f for f in cls.__dataclass_fields__}
         kwargs = {k: v for k, v in data.items() if k in known}
         for name in ("noise_models", "ps", "decoders"):
@@ -163,7 +163,7 @@ class ExperimentConfig:
 
     # construction
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExperimentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
         known = {f for f in cls.__dataclass_fields__}
         kwargs: dict[str, Any] = {k: v for k, v in data.items() if k in known}
         for name in (
@@ -183,7 +183,7 @@ class ExperimentConfig:
         return cls(**kwargs)
 
     @classmethod
-    def from_toml(cls, path: str | Path) -> "ExperimentConfig":
+    def from_toml(cls, path: str | Path) -> ExperimentConfig:
         with open(path, "rb") as handle:
             data = tomllib.load(handle)
         # allow an optional [experiment] table wrapper
@@ -191,5 +191,5 @@ class ExperimentConfig:
             data = data["experiment"]
         return cls.from_dict(data)
 
-    def with_overrides(self, **overrides: Any) -> "ExperimentConfig":
+    def with_overrides(self, **overrides: Any) -> ExperimentConfig:
         return replace(self, **overrides)

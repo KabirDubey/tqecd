@@ -26,7 +26,7 @@ CIRCUITS = Path(__file__).parent / "test_circuits"
 
 
 def _load(name: str) -> stim.Circuit:
-    return stim.Circuit(( CIRCUITS / name ).read_text())
+    return stim.Circuit((CIRCUITS / name).read_text())
 
 
 @pytest.mark.parametrize("name", ["slide_d3_west.stim", "slide_d3_east.stim"])
@@ -35,18 +35,24 @@ def test_oracle_guard_sliding(name: str) -> None:
     assert circuit.num_detectors > 0
     oracle = CircuitOracle(name, circuit)
     assert oracle.applies(unit=None, config=None)
-    assert logically_equivalent(circuit, oracle.annotate(unit=None, k=1, native=circuit))
+    assert logically_equivalent(
+        circuit, oracle.annotate(unit=None, k=1, native=circuit)
+    )
     assert logically_equivalent(circuit, circuit)
     # the guard rejects an annotation that dropped its detectors/observables
     assert not logically_equivalent(circuit, strip_annotations(circuit))
 
 
-@pytest.mark.parametrize("name", ["y_basis_initialization.stim", "y_basis_measurement.stim"])
+@pytest.mark.parametrize(
+    "name", ["y_basis_initialization.stim", "y_basis_measurement.stim"]
+)
 def test_oracle_guard_ybasis(name: str) -> None:
     circuit = _load(name)
     text = str(circuit)
     assert "RY" in text or "MY" in text  # genuinely a Y-basis circuit
     assert circuit.num_detectors > 0
     oracle = CallableOracle(name, emit=lambda unit, k, native: native)
-    assert logically_equivalent(circuit, oracle.annotate(unit=None, k=1, native=circuit))
+    assert logically_equivalent(
+        circuit, oracle.annotate(unit=None, k=1, native=circuit)
+    )
     assert not logically_equivalent(circuit, strip_annotations(circuit))

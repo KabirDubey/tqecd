@@ -89,14 +89,20 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(GADGETS, mo):
     gadget = mo.ui.dropdown(list(GADGETS), value="cnot", label="gadget")
-    convention = mo.ui.dropdown(["fixed_bulk", "fixed_boundary"], value="fixed_bulk", label="convention")
+    convention = mo.ui.dropdown(
+        ["fixed_bulk", "fixed_boundary"], value="fixed_bulk", label="convention"
+    )
     kk = mo.ui.slider(1, 3, value=1, label="k")
     win = mo.ui.slider(2, 4, value=2, label="tqecd window")
     run_btn = mo.ui.run_button(label="▶ Run experiment")
-    mo.vstack([
-        mo.md("## 1. run\nPick a gadget and press run. This is the only stage that compiles."),
-        mo.hstack([gadget, convention, kk, win, run_btn], justify="start"),
-    ])
+    mo.vstack(
+        [
+            mo.md(
+                "## 1. run\nPick a gadget and press run. This is the only stage that compiles."
+            ),
+            mo.hstack([gadget, convention, kk, win, run_btn], justify="start"),
+        ]
+    )
     return convention, gadget, kk, run_btn, win
 
 
@@ -113,13 +119,17 @@ def _(
     run_experiment,
     win,
 ):
-    mo.stop(not run_btn.value, mo.md("*Press **Run experiment** above to build and score.*"))
+    mo.stop(
+        not run_btn.value, mo.md("*Press **Run experiment** above to build and score.*")
+    )
     config = ExperimentConfig(
         conventions=(convention.value,),
         ks=(kk.value,),
         windows=(win.value,),
     )
-    report = run_experiment([GADGETS[gadget.value]()], config, out_dir, show_progress=False)
+    report = run_experiment(
+        [GADGETS[gadget.value]()], config, out_dir, show_progress=False
+    )
     mo.md(f"```\n{report.to_text()}\n```")
     return (report,)
 
@@ -136,14 +146,16 @@ def _(mo, out_dir, report):
 def _(mo, report):
     render_btn = mo.ui.run_button(label="▶ Re-render (UI only)")
     _ = report
-    mo.vstack([
-        mo.md(
-            """## 2. render
+    mo.vstack(
+        [
+            mo.md(
+                """## 2. render
             Rebuild `report.html` from `report.json` alone -- no circuits read, no annotation, no
             re-score. Use it after changing the report/visuals code."""
-        ),
-        mo.hstack([render_btn], justify="start"),
-    ])
+            ),
+            mo.hstack([render_btn], justify="start"),
+        ]
+    )
     return (render_btn,)
 
 
@@ -151,7 +163,9 @@ def _(mo, report):
 def _(mo, out_dir, render_btn, render_report):
     mo.stop(not render_btn.value, mo.md("*idle*"))
     _rendered = render_report(out_dir)
-    mo.md(f"Rebuilt `report.html` from `report.json` — {len(_rendered.rows)} rows, unchanged scores.")
+    mo.md(
+        f"Rebuilt `report.html` from `report.json` — {len(_rendered.rows)} rows, unchanged scores."
+    )
     return
 
 
@@ -160,38 +174,46 @@ def _(mo, report):
     new_window = mo.ui.slider(2, 5, value=3, label="new tqecd window")
     reann_btn = mo.ui.run_button(label="▶ Re-annotate + re-score")
     _ = report
-    mo.vstack([
-        mo.md(
-            """## 3. reannotate
+    mo.vstack(
+        [
+            mo.md(
+                """## 3. reannotate
             Re-annotate the prepared circuits with `tqecd` and re-score -- no recompile. Sweep the
             matching window without rebuilding (or point `PYTHONPATH` at another `tqecd`)."""
-        ),
-        mo.hstack([new_window, reann_btn], justify="start"),
-    ])
+            ),
+            mo.hstack([new_window, reann_btn], justify="start"),
+        ]
+    )
     return new_window, reann_btn
 
 
 @app.cell
 def _(mo, new_window, out_dir, reann_btn, reannotate_run):
     mo.stop(not reann_btn.value, mo.md("*idle*"))
-    _rescored = reannotate_run(out_dir, overrides={"windows": (new_window.value,)}, show_progress=False)
+    _rescored = reannotate_run(
+        out_dir, overrides={"windows": (new_window.value,)}, show_progress=False
+    )
     mo.md(f"```\n{_rescored.to_text()}\n```")
     return
 
 
 @app.cell(hide_code=True)
 def _(mo, report):
-    noise = mo.ui.dropdown(["uniform_depolarizing"], value="uniform_depolarizing", label="noise model")
+    noise = mo.ui.dropdown(
+        ["uniform_depolarizing"], value="uniform_depolarizing", label="noise model"
+    )
     sim_btn = mo.ui.run_button(label="▶ Measure LER")
     _ = report
-    mo.vstack([
-        mo.md(
-            """## 4. simulate
+    mo.vstack(
+        [
+            mo.md(
+                """## 4. simulate
             Measure LER-vs-p on the prepared circuits under a noise model -- no recompile. Two noise
             models measured this way differ only by the model, not by an accident of rebuilding."""
-        ),
-        mo.hstack([noise, sim_btn], justify="start"),
-    ])
+            ),
+            mo.hstack([noise, sim_btn], justify="start"),
+        ]
+    )
     return noise, sim_btn
 
 

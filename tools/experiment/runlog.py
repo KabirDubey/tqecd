@@ -22,7 +22,9 @@ def pretty_now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
-def make_logger(out_dir: str | Path, name: str = "experiment") -> tuple[logging.Logger, Path]:
+def make_logger(
+    out_dir: str | Path, name: str = "experiment"
+) -> tuple[logging.Logger, Path]:
     """Create a file logger under ``<out_dir>/logs`` and return ``(logger, log_path)``."""
     logs_dir = Path(out_dir) / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)

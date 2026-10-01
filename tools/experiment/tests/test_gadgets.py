@@ -43,7 +43,9 @@ def _assert_all_ready_pass(report):
     ready = _ready(report)
     assert ready, "expected at least one READY unit"
     for row in ready:
-        assert row.missing_parities == 0, f"{row.gadget_id}/{row.convention} k={row.k} missing"
+        assert (
+            row.missing_parities == 0
+        ), f"{row.gadget_id}/{row.convention} k={row.k} missing"
         assert row.distance == row.expected_distance, (
             f"{row.gadget_id}/{row.convention} k={row.k} distance "
             f"{row.distance} != {row.expected_distance}"
@@ -70,7 +72,8 @@ def test_y_half_cube_batch_resolves_to_16_bgraphs():
 # reannotate() on a real prepared gadget preserves observables and attaches completely
 def test_reannotate_real_gadget(out_dir):
     manifest = prepare_batch(
-        [cnot(Basis.Z)], BatchConfig(conventions=("fixed_bulk",), ks=(1,), manhattan_radius=2),
+        [cnot(Basis.Z)],
+        BatchConfig(conventions=("fixed_bulk",), ks=(1,), manhattan_radius=2),
         out_dir,
     )
     unit = manifest.units[0]
@@ -92,8 +95,9 @@ def test_two_cnots_different_observables(out_dir):
 
 # One CNOT with open ports
 def test_cnot_open_ports(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              logical_observables="all")
+    config = ExperimentConfig(
+        conventions=("fixed_bulk",), ks=(1,), windows=(2,), logical_observables="all"
+    )
     report = run_experiment([cnot(None)], config, out_dir)
     _assert_all_ready_pass(report)
 
@@ -109,12 +113,17 @@ def test_across_conventions_with_user_oracle(out_dir):
         emit=lambda unit, k, native: native,
         applies_to=lambda unit, config: unit.convention == "fixed_bulk",
     )
-    config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,))
+    config = ExperimentConfig(
+        conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,)
+    )
     report = run_experiment([cnot(Basis.Z)], config, out_dir, oracles=[user_oracle])
     ready = _assert_all_ready_pass(report)
     by_conv = {r.convention: r for r in ready}
     assert set(by_conv) == {"fixed_bulk", "fixed_boundary"}
-    assert by_conv["fixed_bulk"].oracle_results["user_native_fixed_bulk"]["equivalent"] is True
+    assert (
+        by_conv["fixed_bulk"].oracle_results["user_native_fixed_bulk"]["equivalent"]
+        is True
+    )
     assert by_conv["fixed_boundary"].oracle_results == {}
 
 
@@ -140,7 +149,9 @@ def test_progressively_larger_gadgets(out_dir):
 def test_hadamard_arrangements_all_directions(out_dir):
     graphs = hadamard_arrangements()
     assert set(graphs) == set(HADAMARD_DIRECTIONS)
-    config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,))
+    config = ExperimentConfig(
+        conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,)
+    )
     report = run_experiment(list(graphs.values()), config, out_dir)
     # every unit tqec could compile attaches correctly...
     ready = _assert_all_ready_pass(report)
@@ -156,9 +167,10 @@ def test_reannotate_reuses_prepared_circuits(out_dir):
     original = run_experiment([cnot(Basis.Z)], config, out_dir)
     # the full config is persisted so a later reannotate can recover it
     assert (out_dir / "config.json").is_file()
-    assert ExperimentConfig.from_dict(
-        json.loads((out_dir / "config.json").read_text())
-    ) == config
+    assert (
+        ExperimentConfig.from_dict(json.loads((out_dir / "config.json").read_text()))
+        == config
+    )
 
     # leave the prepared circuits intact and just re-annotate off disk. No prepare_batch is called.
     rescored = reannotate_run(out_dir)
@@ -193,6 +205,7 @@ def test_render_rebuilds_ui_from_report_json(out_dir):
 
     # remove everything except report.json: the prepared circuits, the HTML, the config.
     import shutil
+
     shutil.rmtree(out_dir / "prepared")
     (out_dir / "report.html").unlink()
     (out_dir / "config.json").unlink()
@@ -229,8 +242,12 @@ def test_gadget_visuals_for_pipeless_gadget(out_dir):
     report = run_experiment([memory(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
-    assert gv.get("block_graph_html"), "single-cube gadget must still get a 3D block-graph link"
-    assert gv.get("zx_png") or gv.get("zx_link"), "single-cube gadget must still get a ZX picture"
+    assert gv.get(
+        "block_graph_html"
+    ), "single-cube gadget must still get a 3D block-graph link"
+    assert gv.get("zx_png") or gv.get(
+        "zx_link"
+    ), "single-cube gadget must still get a ZX picture"
     # stim circuit diagrams are no longer embedded in any row
     assert all("diagrams" not in (r.visuals or {}) for r in report.rows)
 
@@ -238,12 +255,17 @@ def test_gadget_visuals_for_pipeless_gadget(out_dir):
 # a block graph with more than ZX_INLINE_MAX_NODES cubes gets a linked ZX image, not an inlined one
 def test_zx_linked_for_large_graph(out_dir, monkeypatch):
     from tools.experiment import visuals
-    monkeypatch.setattr(visuals, "ZX_INLINE_MAX_NODES", 0)  # force the "large graph" path
+
+    monkeypatch.setattr(
+        visuals, "ZX_INLINE_MAX_NODES", 0
+    )  # force the "large graph" path
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
-    assert gv.get("zx_link") and not gv.get("zx_png"), "large graph must link the ZX, not inline it"
+    assert gv.get("zx_link") and not gv.get(
+        "zx_png"
+    ), "large graph must link the ZX, not inline it"
     assert (out_dir / gv["zx_link"]).is_file(), "the linked ZX PNG must exist on disk"
 
 
@@ -252,11 +274,20 @@ def test_simulate_run_measures_without_rebuild(out_dir):
     pytest.importorskip("sinter")
     pytest.importorskip("pymatching")
     from tools.experiment.config import SimulationConfig
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,),
-                              simulation=SimulationConfig(max_shots=200))
+
+    config = ExperimentConfig(
+        conventions=("fixed_bulk",),
+        ks=(1,),
+        windows=(2,),
+        simulation=SimulationConfig(max_shots=200),
+    )
     run_experiment([cnot(Basis.Z)], config, out_dir)
-    report = simulate_run(out_dir, noise_models=("uniform_depolarizing",), ps=(5e-3, 1e-2),
-                          show_progress=False)
+    report = simulate_run(
+        out_dir,
+        noise_models=("uniform_depolarizing",),
+        ps=(5e-3, 1e-2),
+        show_progress=False,
+    )
     mcmc = report.meta.get("mcmc", {})
     assert mcmc.get("enabled") and mcmc.get("results", 0) >= 1
     assert mcmc.get("gadgets")  # one MCMC record per (gadget, convention)

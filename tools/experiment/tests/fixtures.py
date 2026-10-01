@@ -7,7 +7,9 @@ from tqec.utils.enums import Basis
 from tqec.utils.position import Position3D
 
 
-def disjoint_union(*graphs: BlockGraph, gap: int = 20, name: str = "disjoint") -> BlockGraph:
+def disjoint_union(
+    *graphs: BlockGraph, gap: int = 20, name: str = "disjoint"
+) -> BlockGraph:
     """Merge several graphs into one disconnected graph, offsetting each along +x.
 
     ``prepare_batch`` (via ``BlockGraph.split_block_graph_batch``) splits the result back into one

@@ -37,7 +37,9 @@ def _plot_png(points: dict[int, list[tuple[float, float]]], title: str) -> bytes
     fig, ax = plt.subplots(figsize=(4.5, 3.2), dpi=120)
     for k in sorted(points):
         pts = sorted(points[k])
-        ax.plot([p for p, _ in pts], [ler for _, ler in pts], marker="o", label=f"k={k}")
+        ax.plot(
+            [p for p, _ in pts], [ler for _, ler in pts], marker="o", label=f"k={k}"
+        )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("physical error rate p")
@@ -68,7 +70,9 @@ def _lambda_factor(points: dict[int, list[tuple[float, float]]]) -> float | None
     return low_map[p] / high_map[p]
 
 
-def _write_setup(config: ExperimentConfig, mcmc_dir: Path, out_dir: Path, batch_result: Any) -> str:
+def _write_setup(
+    config: ExperimentConfig, mcmc_dir: Path, out_dir: Path, batch_result: Any
+) -> str:
     """Write a human-readable MCMC-sampling setup file and return its run-relative path."""
     sim = config.simulation
     lines = [
@@ -89,7 +93,10 @@ def _write_setup(config: ExperimentConfig, mcmc_dir: Path, out_dir: Path, batch_
 
 
 def augment(
-    report: ExperimentReport, manifest: Any, config: ExperimentConfig, out_dir: str | Path
+    report: ExperimentReport,
+    manifest: Any,
+    config: ExperimentConfig,
+    out_dir: str | Path,
 ) -> ExperimentReport:
     """Run ``simulate_batch`` and record the MCMC results in ``report.meta["mcmc"]``.
 
@@ -131,7 +138,9 @@ def augment(
                 "gadget_id": gadget_id,
                 "convention": convention,
                 "plot": plot_rel,
-                "lambda": _lambda_factor(points) if config.simulation.lambda_factor else None,
+                "lambda": _lambda_factor(points)
+                if config.simulation.lambda_factor
+                else None,
             }
         )
 

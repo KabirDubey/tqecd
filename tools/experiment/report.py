@@ -86,7 +86,14 @@ class ExperimentReport:
     gadget_visuals: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def summary(self) -> dict[str, int]:
-        counts = {PASS: 0, PREDICTOR_FAIL: 0, PREP_FAIL: 0, ANNOTATE_FAIL: 0, NOT_SCORED: 0, SIM_FAIL: 0}
+        counts = {
+            PASS: 0,
+            PREDICTOR_FAIL: 0,
+            PREP_FAIL: 0,
+            ANNOTATE_FAIL: 0,
+            NOT_SCORED: 0,
+            SIM_FAIL: 0,
+        }
         for row in self.rows:
             counts[row.status_kind] = counts.get(row.status_kind, 0) + 1
         scored = counts[PASS] + counts[PREDICTOR_FAIL]
@@ -385,7 +392,9 @@ class ExperimentReport:
             inner = f'<button type="button">{label}</button>' if sortable else label
             sort = ' aria-sort="none"' if sortable else ""
             # hover text on the header explaining what a predictor computes and its backend
-            title = f' title="{html.escape(col["htitle"])}"' if col.get("htitle") else ""
+            title = (
+                f' title="{html.escape(col["htitle"])}"' if col.get("htitle") else ""
+            )
             return f'<th{cls} data-col="{col["key"]}" data-idx="{idx}"{rs} scope="col"{sort}{title}>{inner}</th>'
 
         row1, row2, opened = ["<tr>"], ["<tr>"], set()
@@ -645,7 +654,9 @@ def _result_explanation(r: ExperimentRow) -> str:
         base = "prep fail: tqec could not prepare this gadget"
         return f"{base} ({r.notes})" if r.notes else base
     if r.status_kind == ANNOTATE_FAIL:
-        return "annotate fail: tqecd raised while re-annotating this circuit -- " + (r.notes or "see Notes")
+        return "annotate fail: tqecd raised while re-annotating this circuit -- " + (
+            r.notes or "see Notes"
+        )
     if r.status_kind == SIM_FAIL:
         return "sim fail: the simulation stage failed for this row"
     return "not scored: no predictors were run for this row"
