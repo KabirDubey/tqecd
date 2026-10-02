@@ -46,14 +46,13 @@ _BADGE_TEXT = {
 
 @dataclass
 class ExperimentRow:
-    """One measured (gadget, convention, k, window) cell."""
+    """One measured (gadget, convention, k) cell."""
 
     gadget_id: str
     source: str
     name: str
     convention: str
     k: int
-    window: int
     status: str
     status_kind: str = NOT_SCORED
     missing_parities: int | None = None
@@ -151,7 +150,6 @@ class ExperimentReport:
             ("observable", lambda r: r.observable),
             ("convention", lambda r: r.convention),
             ("k", lambda r: r.k),
-            ("window", lambda r: r.window),
             ("missing", lambda r: r.missing_parities),
             ("distance", lambda r: r.distance),
             ("expected", lambda r: r.expected_distance),
@@ -256,13 +254,6 @@ class ExperimentReport:
                 "default": True,
                 "numeric": True,
                 "value": num("k"),
-            },
-            {
-                "key": "window",
-                "label": "Window",
-                "default": False,
-                "numeric": True,
-                "value": num("window"),
             },
             {
                 "key": "missing",

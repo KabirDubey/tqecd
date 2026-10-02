@@ -7,5 +7,4 @@ name = "Hadamard-pipe arrangements (spatial + temporal)"
 inputs = ["hadamard_arrangements"]
 conventions = ["fixed_bulk", "fixed_boundary"]
 ks = [1, 2]
-windows = [2]
 predictors = ["parities", "distance"]

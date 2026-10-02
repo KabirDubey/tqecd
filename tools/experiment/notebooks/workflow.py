@@ -93,17 +93,16 @@ def _(GADGETS, mo):
         ["fixed_bulk", "fixed_boundary"], value="fixed_bulk", label="convention"
     )
     kk = mo.ui.slider(1, 3, value=1, label="k")
-    win = mo.ui.slider(2, 4, value=2, label="tqecd window")
     run_btn = mo.ui.run_button(label="▶ Run experiment")
     mo.vstack(
         [
             mo.md(
                 "## 1. run\nPick a gadget and press run. This is the only stage that compiles."
             ),
-            mo.hstack([gadget, convention, kk, win, run_btn], justify="start"),
+            mo.hstack([gadget, convention, kk, run_btn], justify="start"),
         ]
     )
-    return convention, gadget, kk, run_btn, win
+    return convention, gadget, kk, run_btn
 
 
 @app.cell
@@ -117,7 +116,6 @@ def _(
     out_dir,
     run_btn,
     run_experiment,
-    win,
 ):
     mo.stop(
         not run_btn.value, mo.md("*Press **Run experiment** above to build and score.*")
@@ -125,7 +123,6 @@ def _(
     config = ExperimentConfig(
         conventions=(convention.value,),
         ks=(kk.value,),
-        windows=(win.value,),
     )
     report = run_experiment(
         [GADGETS[gadget.value]()], config, out_dir, show_progress=False
@@ -171,28 +168,25 @@ def _(mo, out_dir, render_btn, render_report):
 
 @app.cell(hide_code=True)
 def _(mo, report):
-    new_window = mo.ui.slider(2, 5, value=3, label="new tqecd window")
     reann_btn = mo.ui.run_button(label="▶ Re-annotate + re-score")
     _ = report
     mo.vstack(
         [
             mo.md(
                 """## 3. reannotate
-            Re-annotate the prepared circuits with `tqecd` and re-score -- no recompile. Sweep the
-            matching window without rebuilding (or point `PYTHONPATH` at another `tqecd`)."""
+            Re-annotate the prepared circuits with `tqecd` and re-score -- no recompile. Point
+            `PYTHONPATH` at another `tqecd` to compare annotators without rebuilding."""
             ),
-            mo.hstack([new_window, reann_btn], justify="start"),
+            mo.hstack([reann_btn], justify="start"),
         ]
     )
-    return new_window, reann_btn
+    return (reann_btn,)
 
 
 @app.cell
-def _(mo, new_window, out_dir, reann_btn, reannotate_run):
+def _(mo, out_dir, reann_btn, reannotate_run):
     mo.stop(not reann_btn.value, mo.md("*idle*"))
-    _rescored = reannotate_run(
-        out_dir, overrides={"windows": (new_window.value,)}, show_progress=False
-    )
+    _rescored = reannotate_run(out_dir, show_progress=False)
     mo.md(f"```\n{_rescored.to_text()}\n```")
     return
 

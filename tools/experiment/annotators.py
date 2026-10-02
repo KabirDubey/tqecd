@@ -1,8 +1,8 @@
 """Annotators under comparison: turn a native circuit into a re-annotated one.
 
-The experimental subject is ``tqecd``'s windowed :func:`annotate_detectors_automatically`
+The experimental subject is ``tqecd``'s :func:`annotate_detectors_automatically`
 (:func:`reannotate`). References (oracles, see :mod:`tools.experiment.oracle`) are alternate
-annotators scored the same way -- ``tqec``'s own native annotation and the main-branch (windowless)
+annotators scored the same way -- ``tqec``'s own native annotation and the main-branch
 ``tqecd`` run out-of-process.
 
 Stripping detectors/observables is sourced from :func:`tqecd.utils.remove_annotations`; observables
@@ -12,7 +12,6 @@ a bare circuit and does not preserve the logical observables.
 
 from __future__ import annotations
 
-import inspect
 import os
 import subprocess
 import sys
@@ -27,7 +26,7 @@ _MEASUREMENT_GATES = frozenset(
     {"M", "MR", "MX", "MY", "MZ", "MRX", "MRY", "MRZ", "MPP"}
 )
 
-#: Default location of the origin/main ``tqecd`` git worktree (for the windowless oracle).
+#: Default location of the origin/main ``tqecd`` git worktree (for the ``tqecd_main`` oracle).
 DEFAULT_MAIN_SRC = Path(__file__).resolve().parents[3] / ".tqecd-main" / "src"
 
 
@@ -81,36 +80,10 @@ def reannotate_with(
     return reattach_observables(annotated, observables)
 
 
-#: ``ExperimentRow.window`` recorded when the installed ``tqecd`` has no ``window`` parameter
-#: (windowless build, e.g. tqecd PR #74), so ``config.windows`` does not apply. Same ``-1`` that
-#: unscored prep rows already carry, so the report and artifact paths (``..._w-1``) accept it.
-NO_WINDOW = -1
-
-
-def supports_window() -> bool:
-    """Whether the imported ``annotate_detectors_automatically`` accepts a ``window`` argument."""
+def reannotate(circuit: stim.Circuit) -> stim.Circuit:
+    """The experimental annotator: in-repo ``tqecd`` ``annotate_detectors_automatically``."""
     from tqecd.construction import annotate_detectors_automatically
 
-    try:
-        return (
-            "window" in inspect.signature(annotate_detectors_automatically).parameters
-        )
-    except (TypeError, ValueError):
-        return True
-
-
-def reannotate(circuit: stim.Circuit, *, window: int = 2) -> stim.Circuit:
-    """The experimental annotator: in-repo ``tqecd`` ``annotate_detectors_automatically``.
-
-    ``window`` is forwarded only if the installed function accepts it (see :func:`supports_window`);
-    on a windowless build it is ignored.
-    """
-    from tqecd.construction import annotate_detectors_automatically
-
-    if supports_window():
-        return reannotate_with(
-            circuit, lambda bare: annotate_detectors_automatically(bare, window=window)
-        )
     return reannotate_with(circuit, annotate_detectors_automatically)
 
 
@@ -120,17 +93,17 @@ def native_annotation(native: stim.Circuit) -> stim.Circuit:
 
 
 def main_branch_src() -> Path | None:
-    """Path to the origin/main ``tqecd`` ``src`` for the windowless oracle, or ``None`` if absent."""
+    """Path to the origin/main ``tqecd`` ``src`` for the ``tqecd_main`` oracle, or ``None`` if absent."""
     src = Path(os.environ.get("TQECD_MAIN_SRC", str(DEFAULT_MAIN_SRC)))
     return src if (src / "tqecd" / "construction.py").is_file() else None
 
 
 def main_branch_reannotation(native: stim.Circuit) -> stim.Circuit:
-    """The windowless oracle: re-annotate via main-branch ``tqecd`` in a subprocess.
+    """The ``tqecd_main`` oracle: re-annotate via main-branch ``tqecd`` in a subprocess.
 
-    The main-branch ``tqecd`` and the in-repo (windowed) one are different packages that cannot
+    The main-branch ``tqecd`` and the in-repo one are different packages that cannot
     share a process, so the bare circuit is annotated in a subprocess whose ``PYTHONPATH`` points
-    at the main-branch ``src`` (its ``annotate_detectors_automatically`` takes no ``window``).
+    at the main-branch ``src``.
     """
     src = main_branch_src()
     if src is None:

@@ -8,7 +8,6 @@ Examples::
     python -m tools.experiment --input my_gadget.dae --k 1,2,3
     python -m tools.experiment --render experiment_out                # rebuild report.html only
     python -m tools.experiment --reannotate experiment_out            # re-score from disk, no recompile
-    python -m tools.experiment --reannotate experiment_out --windows 3  # re-score a new tqecd window
     python -m tools.experiment --simulate experiment_out --noise-models si1000  # LER, no rebuild
     python -m tools.experiment --clean experiment_out                # delete a run's output + logs
 
@@ -16,7 +15,7 @@ Examples::
 runs a single one; ``--list-gallery`` prints the available names. ``--render <run_dir>`` rebuilds
 ``report.html`` from an existing ``report.json`` (UI only--no annotation, no recompile).
 ``--reannotate <run_dir>`` re-annotates and re-scores a run's on-disk circuits with ``tqecd``
-(no recompile); pass ``--windows`` / ``--oracles`` to re-score with different tqecd settings.
+(no recompile); pass ``--oracles`` to re-score with different oracles.
 ``--simulate <run_dir>`` measures a run's circuits (LER-vs-p plots) under ``--noise-models`` /
 ``--ps`` without rebuilding, so two noise models can be compared on identical circuits.
 """
@@ -29,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.experiment import gadgets
-from tools.experiment.config import ExperimentConfig
+from tools.experiment.config import ExperimentConfig, warn_windows_deprecated
 from tools.experiment.core import run_experiment
 
 
@@ -82,7 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--k", type=_ints, help="comma-separated ks, e.g. 1,2,3")
     parser.add_argument("--conventions", type=lambda s: tuple(s.split(",")))
-    parser.add_argument("--windows", type=_ints)
+    parser.add_argument(
+        "--windows", type=_ints, help="deprecated and ignored (tqecd has no windowing)"
+    )
     parser.add_argument("--oracles", type=lambda s: tuple(s.split(",")))
     parser.add_argument(
         "--noise-models",
@@ -97,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--out", type=Path, default=Path("experiment_out"))
     args = parser.parse_args(argv)
+    if args.windows:
+        warn_windows_deprecated()
 
     if args.list_gallery:
         avail = gadgets.available_inputs()
@@ -152,8 +155,6 @@ def main(argv: list[str] | None = None) -> int:
         from tools.experiment.core import reannotate_run
 
         reannotate_overrides: dict[str, Any] = {}
-        if args.windows:
-            reannotate_overrides["windows"] = args.windows
         if args.oracles:
             reannotate_overrides["oracles"] = args.oracles
         baked = [
@@ -190,8 +191,6 @@ def main(argv: list[str] | None = None) -> int:
         overrides["ks"] = args.k
     if args.conventions:
         overrides["conventions"] = args.conventions
-    if args.windows:
-        overrides["windows"] = args.windows
     if args.oracles:
         overrides["oracles"] = args.oracles
     if overrides:

@@ -5,8 +5,8 @@
 # that `tqecd` core never gains a dependency on `tqec`.
 #
 # The `tqec` dependency (which provides `tqec.orchestration`) floors at the branch carrying the
-# batch orchestration interface (`kd/dae-batch-processing`); `tqecd` must carry the windowed
-# detector completion (`feat/yfragmentflow`, the branch this tool stacks on).
+# batch orchestration interface (`kd/dae-batch-processing`); `tqecd` must carry the Y-fragment
+# minimal commuting cover (tqecd PR #74).
 
 [project]
 name = "tqecd-experiment"

@@ -102,8 +102,8 @@ def augment(
 
     Writes a sampling setup file and, when ``simulation.plot`` is set, one LER-vs-p plot PNG per
     ``(gadget, convention)`` under ``<out_dir>/mcmc/``; the report renders these as an MCMC section
-    (a row per gadget with links to its plot and to the setup). The LER is independent of the tqecd
-    window, so one curve set is produced per ``(gadget, convention)``.
+    (a row per gadget with links to its plot and to the setup). The LER is measured on the prepared (native)
+    circuits, so one curve set is produced per ``(gadget, convention)``.
     """
     from tqec.orchestration import simulate_batch
 

@@ -13,7 +13,7 @@ properties of a single circuit without comparing it to any reference annotation.
 The GF(2) linear algebra is sourced from ``tqecd`` itself--:class:`tqecd.cover.BinaryVectorBasis`,
 the same incremental Gaussian-elimination primitive ``tqecd`` uses to reduce detector candidates.
 Measurement-record sets are encoded as arbitrary-precision integer bit-vectors (one bit per
-measurement), exactly as ``tqecd.window`` encodes them, so no separate matrix library is needed.
+measurement), exactly as ``tqecd.cover`` encodes them, so no separate matrix library is needed.
 """
 
 from __future__ import annotations

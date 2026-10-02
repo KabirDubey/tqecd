@@ -14,7 +14,6 @@
 [experiment]
 conventions = ["fixed_bulk"]
 ks = [1, 2, 3]
-windows = [2]
 predictors = ["parities", "distance"]
 
 [experiment.simulation]

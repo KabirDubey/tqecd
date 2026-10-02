@@ -1,6 +1,6 @@
 """Reference *oracles*--alternate annotators to compare the experimental one against.
 
-The experimental subject is ``tqecd``'s windowed ``annotate_detectors_automatically``
+The experimental subject is ``tqecd``'s ``annotate_detectors_automatically``
 (:func:`tools.experiment.annotators.reannotate`). An **oracle is another annotator** producing an
 alternate annotation of the same gadget; the report scores each oracle on the *same* metric as the
 experimental one (distance vs ``2k+1``) and additionally checks logical equivalence to it, so the
@@ -10,8 +10,8 @@ Two oracles ship built in:
 
 * ``native`` -- ``tqec``'s own native annotation (the circuit ``prepare_batch`` wrote), a valid
   same-behavior reference wherever ``tqec`` could compile the gadget (every convention).
-* ``tqecd_main`` -- the main-branch (windowless) ``tqecd`` ``annotate_detectors_automatically``,
-  run out-of-process (see :mod:`tools.experiment.annotators`); it isolates the effect of windowing.
+* ``tqecd_main`` -- the main-branch ``tqecd`` ``annotate_detectors_automatically``,
+  run out-of-process (see :mod:`tools.experiment.annotators`); it is the baseline for the experimental ``tqecd``.
   It applies only when the main-branch worktree is available.
 
 Users can add their own: a fixed annotated circuit (:class:`CircuitOracle`) or a callable emitting
@@ -143,7 +143,7 @@ NATIVE_ORACLE = CallableOracle(
     emit=lambda unit, k, native: annotators.native_annotation(native),
     applies_to=_always,
 )
-#: Built-in oracle: main-branch (windowless) tqecd, run out-of-process. Isolates the windowing pass.
+#: Built-in oracle: main-branch tqecd, run out-of-process; the baseline for the experimental ``tqecd``.
 #: It always applies when selected: if the main-branch worktree is missing, ``annotate`` raises and
 #: the row records the error (surfaced in the oracle's cell) rather than silently omitting it.
 MAIN_ORACLE = CallableOracle(

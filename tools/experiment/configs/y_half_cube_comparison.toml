@@ -15,6 +15,5 @@ name = "y half cube: fixed-bulk native generator vs tqecd annotation"
 inputs = ["y_half_cube"]
 conventions = ["fixed_bulk", "fixed_boundary"]
 ks = [1, 2, 3]
-windows = [2]
 predictors = ["parities", "distance"]
 oracles = ["native"]

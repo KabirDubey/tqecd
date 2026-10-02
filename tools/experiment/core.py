@@ -78,7 +78,6 @@ def _score(
     reannotated: stim.Circuit,
     unit: Any,
     k: int,
-    window: int,
     config: ExperimentConfig,
 ) -> ExperimentRow:
     row = ExperimentRow(
@@ -87,7 +86,6 @@ def _score(
         name=getattr(unit, "name", ""),
         convention=unit.convention,
         k=k,
-        window=window,
         status=unit.status,
         observable=_observable_label(unit),
     )
@@ -155,7 +153,7 @@ def _score_oracles(
             distance = predictors.shortest_graphlike_error(noisy)
             res["distance"] = distance
             res["distance_ok"] = distance == row.expected_distance
-        cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}_w{row.window}"
+        cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}"
         try:
             path = visuals.write_circuit(circuit, cell / f"oracle_{name}.stim")
             res["stim"] = _relpath(path, out_dir)
@@ -172,16 +170,13 @@ def _prep_row(unit: Any) -> ExperimentRow:
         name=getattr(unit, "name", ""),
         convention=unit.convention,
         k=-1,
-        window=-1,
         status=status,
         status_kind=_status_kind(status, None),
         notes=getattr(unit, "error", "") or getattr(unit, "notes", ""),
     )
 
 
-def _annotate_fail_row(
-    unit: Any, k: int, window: int, exc: BaseException
-) -> ExperimentRow:
+def _annotate_fail_row(unit: Any, k: int, exc: BaseException) -> ExperimentRow:
     """A scored row whose ``tqecd`` re-annotation raised -- recorded so one crash isn't fatal."""
     return ExperimentRow(
         gadget_id=unit.gadget_id,
@@ -189,7 +184,6 @@ def _annotate_fail_row(
         name=getattr(unit, "name", ""),
         convention=unit.convention,
         k=k,
-        window=window,
         status=unit.status,
         status_kind=ANNOTATE_FAIL,
         observable=_observable_label(unit),
@@ -287,7 +281,7 @@ def _attach_visuals(
     Stim's embedded circuit diagrams are no longer produced; the circuit is inspected through the
     crumble link and the written ``.stim`` files instead.
     """
-    cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}_w{row.window}"
+    cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}"
     v: dict[str, Any] = {}
     try:
         v["crumble"] = visuals.crumble_url(reannotated)
@@ -358,18 +352,8 @@ def _score_and_render(
     artifacts = out_dir / "artifacts"
     gadget_visuals: dict[str, dict[str, Any]] = {}
     rows: list[ExperimentRow] = []
-    work: list[tuple[Any, int, stim.Circuit, int]] = []
+    work: list[tuple[Any, int, stim.Circuit]] = []
     last_manifest = None
-
-    windows: tuple[int, ...] = tuple(config.windows)
-    if not annotators.supports_window():
-        windows = (annotators.NO_WINDOW,)
-        log.warning(
-            "windows=%s ignored: the installed tqecd annotate_detectors_automatically has no "
-            "'window' parameter; annotating once per (unit, k), rows carry window=%d",
-            list(config.windows),
-            annotators.NO_WINDOW,
-        )
 
     for manifest in manifests:
         last_manifest = manifest
@@ -388,8 +372,7 @@ def _score_and_render(
                 continue
             for k, rel in unit.circuits.items():
                 native = stim.Circuit.from_file(manifest.run_dir / rel)
-                for window in windows:
-                    work.append((unit, k, native, window))
+                work.append((unit, k, native))
 
     iterator: Any = work
     if show_progress:
@@ -400,11 +383,11 @@ def _score_and_render(
         except Exception:
             iterator = work
 
-    for unit, k, native, window in iterator:
+    for unit, k, native in iterator:
         started = time.perf_counter()
         try:
-            reannotated = annotators.reannotate(native, window=window)
-            row = _score(native, reannotated, unit, k, window, config)
+            reannotated = annotators.reannotate(native)
+            row = _score(native, reannotated, unit, k, config)
             row.runtime_s = time.perf_counter() - started
             _score_oracles(
                 row, reannotated, unit, k, native, config, oracles, artifacts, out_dir
@@ -413,7 +396,7 @@ def _score_and_render(
         except (
             Exception
         ) as exc:  # a tqecd crash on a hard gadget is recorded, not fatal
-            row = _annotate_fail_row(unit, k, window, exc)
+            row = _annotate_fail_row(unit, k, exc)
             row.runtime_s = time.perf_counter() - started
             # the native oracle only needs the native circuit, so still show the generator's distance
             _score_oracles(
@@ -421,11 +404,10 @@ def _score_and_render(
             )
         rows.append(row)
         log.info(
-            "score %s [%s] k=%s w=%s missing=%s dist=%s pass=%s",
+            "score %s [%s] k=%s missing=%s dist=%s pass=%s",
             unit.gadget_id,
             unit.convention,
             k,
-            window,
             row.missing_parities,
             row.distance,
             row.predictors_pass,
@@ -440,7 +422,6 @@ def _score_and_render(
             "config": "config.toml" if (out_dir / "config.toml").is_file() else "",
             "conventions": list(config.conventions),
             "ks": list(config.ks),
-            "windows": list(config.windows),
             "predictors": list(config.predictors),
             "oracles": [getattr(o, "name", str(o)) for o in oracles],
             "simulation_enabled": config.simulation.enabled,
@@ -473,7 +454,7 @@ def run_experiment(
     Args:
         inputs: a mix of ``.dae`` / ``.bgraph`` paths and in-memory ``BlockGraph`` objects, passed
             straight to ``tqec.orchestration.prepare_batch``.
-        config: experiment knobs (conventions, ks, windows, predictors, oracles).
+        config: experiment knobs (conventions, ks, predictors, oracles).
         out_dir: directory for the run artifacts and the report.
         oracles: optional user-supplied reference oracles (objects), compared up to logical
             symmetry; merged with any registered by name in ``config.oracles``. Ground truth is
@@ -495,10 +476,9 @@ def run_experiment(
         )  # the config defines its own inputs
     log, log_path = runlog.make_logger(out_dir)
     log.info(
-        "start: conventions=%s ks=%s windows=%s inputs=%d",
+        "start: conventions=%s ks=%s inputs=%d",
         config.conventions,
         config.ks,
-        config.windows,
         len(inputs),
     )
     _write_config(config, out_dir)
@@ -530,7 +510,7 @@ def reannotate_run(
     ``run_dir`` is an experiment output directory that still holds its ``prepared/manifest.json``
     and the circuits and graphs they reference. The native circuits are read off disk, re-annotated
     with ``tqecd``, scored, and written back out with fresh visuals and a fresh report. Use it to
-    re-score with a different ``tqecd`` matching window / ``oracles`` / predictor selection, or
+    re-score with different ``oracles`` / predictor selection, or
     against a different ``tqecd`` on the ``PYTHONPATH``, without paying for a recompile. To rebuild
     only the ``report.html`` UI from an existing ``report.json`` (no annotation), use
     :func:`render_report`.
@@ -538,7 +518,7 @@ def reannotate_run(
     Args:
         run_dir: a prior run directory (the ``--out`` of an earlier run).
         overrides: config fields to override before re-scoring. Only knobs that do not require
-            recompilation take effect (``windows``, ``predictors``, ``oracles``, ``noise_models``,
+            recompilation take effect (``predictors``, ``oracles``, ``noise_models``,
             ``ps``, ``expected_distance``, ``simulation``); ``ks`` / ``conventions`` /
             ``logical_observables`` are baked into the prepared circuits and are read back from the
             manifests on disk.
@@ -565,9 +545,8 @@ def reannotate_run(
 
     log, log_path = runlog.make_logger(run_dir, name="reannotate")
     log.info(
-        "reannotate: run_dir=%s windows=%s predictors=%s",
+        "reannotate: run_dir=%s predictors=%s",
         run_dir,
-        config.windows,
         config.predictors,
     )
     active_oracles = [*oracles, *config.enabled_oracles()]

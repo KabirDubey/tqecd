@@ -78,7 +78,7 @@ def test_reannotate_real_gadget(out_dir):
     )
     unit = manifest.units[0]
     native = stim.Circuit.from_file(manifest.run_dir / unit.circuits[1])
-    reannotated = annotators.reannotate(native, window=2)
+    reannotated = annotators.reannotate(native)
     assert reannotated.num_observables == native.num_observables
     assert reannotated.num_measurements == native.num_measurements
     assert count_missing_parities(reannotated) == 0
@@ -86,7 +86,7 @@ def test_reannotate_real_gadget(out_dir):
 
 # Two CNOTs, different observable bases
 def test_two_cnots_different_observables(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2))
     report = run_experiment([cnot(Basis.X), cnot(Basis.Z)], config, out_dir)
     ready = _assert_all_ready_pass(report)
     # both gadgets present
@@ -96,7 +96,7 @@ def test_two_cnots_different_observables(out_dir):
 # One CNOT with open ports
 def test_cnot_open_ports(out_dir):
     config = ExperimentConfig(
-        conventions=("fixed_bulk",), ks=(1,), windows=(2,), logical_observables="all"
+        conventions=("fixed_bulk",), ks=(1,), logical_observables="all"
     )
     report = run_experiment([cnot(None)], config, out_dir)
     _assert_all_ready_pass(report)
@@ -113,9 +113,7 @@ def test_across_conventions_with_user_oracle(out_dir):
         emit=lambda unit, k, native: native,
         applies_to=lambda unit, config: unit.convention == "fixed_bulk",
     )
-    config = ExperimentConfig(
-        conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,)
-    )
+    config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,))
     report = run_experiment([cnot(Basis.Z)], config, out_dir, oracles=[user_oracle])
     ready = _assert_all_ready_pass(report)
     by_conv = {r.convention: r for r in ready}
@@ -130,7 +128,7 @@ def test_across_conventions_with_user_oracle(out_dir):
 # Two disjoint CNOTs in one input, swept over k
 def test_two_disjoint_cnots_split(out_dir):
     graph = disjoint_union(cnot(Basis.Z), cnot(Basis.Z))
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2))
     report = run_experiment([graph], config, out_dir)
     ready = _assert_all_ready_pass(report)
     assert len({r.gadget_id for r in ready}) == 2  # split into two gadgets
@@ -139,7 +137,7 @@ def test_two_disjoint_cnots_split(out_dir):
 # cnot + three_cnots in one graph (progressively larger), swept over k
 def test_progressively_larger_gadgets(out_dir):
     graph = disjoint_union(cnot(Basis.Z), three_cnots(Basis.Z))
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2))
     report = run_experiment([graph], config, out_dir)
     ready = _assert_all_ready_pass(report)
     assert len({r.gadget_id for r in ready}) == 2
@@ -149,9 +147,7 @@ def test_progressively_larger_gadgets(out_dir):
 def test_hadamard_arrangements_all_directions(out_dir):
     graphs = hadamard_arrangements()
     assert set(graphs) == set(HADAMARD_DIRECTIONS)
-    config = ExperimentConfig(
-        conventions=("fixed_bulk", "fixed_boundary"), ks=(1,), windows=(2,)
-    )
+    config = ExperimentConfig(conventions=("fixed_bulk", "fixed_boundary"), ks=(1,))
     report = run_experiment(list(graphs.values()), config, out_dir)
     # every unit tqec could compile attaches correctly...
     ready = _assert_all_ready_pass(report)
@@ -163,7 +159,7 @@ def test_hadamard_arrangements_all_directions(out_dir):
 
 # reannotate_run re-scores a run from its on-disk circuits without recompiling
 def test_reannotate_reuses_prepared_circuits(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,))
     original = run_experiment([cnot(Basis.Z)], config, out_dir)
     # the full config is persisted so a later reannotate can recover it
     assert (out_dir / "config.json").is_file()
@@ -174,23 +170,9 @@ def test_reannotate_reuses_prepared_circuits(out_dir):
 
     # leave the prepared circuits intact and just re-annotate off disk. No prepare_batch is called.
     rescored = reannotate_run(out_dir)
-    assert [(r.gadget_id, r.convention, r.k, r.window) for r in _ready(rescored)] == [
-        (r.gadget_id, r.convention, r.k, r.window) for r in _ready(original)
+    assert [(r.gadget_id, r.convention, r.k) for r in _ready(rescored)] == [
+        (r.gadget_id, r.convention, r.k) for r in _ready(original)
     ]
-    _assert_all_ready_pass(rescored)
-
-
-# reannotate can re-score with a different tqecd window without recompiling
-def test_reannotate_window_override(out_dir):
-    from tools.experiment import annotators
-
-    if not annotators.supports_window():
-        pytest.skip("installed tqecd has no window parameter (windows are ignored)")
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
-    run_experiment([cnot(Basis.Z)], config, out_dir)
-    rescored = reannotate_run(out_dir, overrides={"windows": (3,)})
-    ready = _ready(rescored)
-    assert ready and {r.window for r in ready} == {3}
     _assert_all_ready_pass(rescored)
 
 
@@ -204,7 +186,7 @@ def test_reannotate_without_prepared_circuits(tmp_path):
 
 # render rebuilds report.html from report.json alone--no circuits, no annotation, no re-score
 def test_render_rebuilds_ui_from_report_json(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,))
     original = run_experiment([cnot(Basis.Z)], config, out_dir)
 
     # remove everything except report.json: the prepared circuits, the HTML, the config.
@@ -233,7 +215,7 @@ def test_render_without_report_json(tmp_path):
 
 # every scored row records the wall time of annotation + analysis
 def test_runtime_recorded(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,))
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     scored = _ready(report)
     assert scored and all(r.runtime_s is not None and r.runtime_s > 0 for r in scored)
@@ -242,7 +224,7 @@ def test_runtime_recorded(out_dir):
 # the 3D block-graph link and ZX picture are produced even for a pipeless single-cube gadget
 # (tqec's BlockGraph.from_json rejects those; the tool's tolerant loader must handle them)
 def test_gadget_visuals_for_pipeless_gadget(out_dir):
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,))
     report = run_experiment([memory(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
@@ -263,7 +245,7 @@ def test_zx_linked_for_large_graph(out_dir, monkeypatch):
     monkeypatch.setattr(
         visuals, "ZX_INLINE_MAX_NODES", 0
     )  # force the "large graph" path
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,))
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
@@ -282,7 +264,6 @@ def test_simulate_run_measures_without_rebuild(out_dir):
     config = ExperimentConfig(
         conventions=("fixed_bulk",),
         ks=(1,),
-        windows=(2,),
         simulation=SimulationConfig(max_shots=200),
     )
     run_experiment([cnot(Basis.Z)], config, out_dir)
@@ -297,28 +278,39 @@ def test_simulate_run_measures_without_rebuild(out_dir):
     assert mcmc.get("gadgets")  # one MCMC record per (gadget, convention)
 
 
-# A windowless tqecd (e.g. PR #74) must not raise TypeError; windows collapse to one row per (unit, k)
-def test_windowless_tqecd_runs_once_per_unit_k(out_dir, monkeypatch):
-    from tqecd import construction
-    from tools.experiment import annotators
+# A leftover ``windows`` setting is accepted and ignored with a deprecation warning
+def test_deprecated_windows_is_ignored():
+    with pytest.warns(FutureWarning, match="windows"):
+        config = ExperimentConfig.from_dict({"ks": [1], "windows": [2, 3]})
+    assert config.ks == (1,)
+    assert not hasattr(config, "windows")
+    assert "windows" not in config.to_dict()
+    with pytest.warns(FutureWarning, match="windows"):
+        assert config.with_overrides(windows=(3,)) == config
 
-    real = construction.annotate_detectors_automatically
-    extra = {"window": 2} if annotators.supports_window() else {}
-    calls = []
 
-    def windowless(circuit):  # no ``window`` parameter, like the patched tqecd
-        calls.append(1)
-        return real(circuit, **extra)
+# An old config.toml carrying ``windows = [...]`` still loads
+def test_old_toml_with_windows_loads(tmp_path):
+    path = tmp_path / "old.toml"
+    path.write_text("[experiment]\nks = [1, 2]\nwindows = [2]\n")
+    with pytest.warns(FutureWarning, match="windows"):
+        config = ExperimentConfig.from_toml(path)
+    assert config.ks == (1, 2)
 
-    monkeypatch.setattr(construction, "annotate_detectors_automatically", windowless)
-    assert not annotators.supports_window()
-    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2, 3))
-    report = run_experiment([cnot(Basis.Z)], config, out_dir)
-    ready = _assert_all_ready_pass(report)
-    assert not [r for r in report.rows if r.status_kind == "annotate_fail"]
-    assert sorted((r.gadget_id, r.k) for r in ready) == sorted(
-        {(r.gadget_id, r.k) for r in ready}
+
+# An old report.json whose rows still carry a ``window`` key loads
+def test_old_report_row_with_window_loads():
+    from tools.experiment.report import ExperimentRow
+
+    row = ExperimentRow.from_dict(
+        {
+            "gadget_id": "g",
+            "source": "",
+            "name": "g",
+            "convention": "fixed_bulk",
+            "k": 1,
+            "window": 2,
+            "status": "ready",
+        }
     )
-    assert {r.k for r in ready} == {1, 2}
-    assert {r.window for r in ready} == {annotators.NO_WINDOW}
-    assert len(calls) == 2  # once per k, not once per (k, window)
+    assert row.k == 1 and not hasattr(row, "window")

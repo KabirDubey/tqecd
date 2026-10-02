@@ -28,7 +28,7 @@ def _circuit(detectors: str) -> stim.Circuit:
 
 
 def test_builtin_oracles_registered():
-    # native + tqecd_main (the windowless main-branch annotator) ship registered.
+    # native + tqecd_main (the main-branch annotator) ship registered.
     assert available_oracles() == ["native", "tqecd_main"]
 
 

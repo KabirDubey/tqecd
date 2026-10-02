@@ -3,9 +3,21 @@
 from __future__ import annotations
 
 import tomllib
+import warnings
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+
+
+WINDOWS_DEPRECATION = (
+    "'windows' is deprecated and ignored: tqecd no longer has a windowed completion pass "
+    "(annotate_detectors_automatically takes only the circuit). Remove it from the config / CLI."
+)
+
+
+def warn_windows_deprecated() -> None:
+    """Emit the one-line deprecation warning for a leftover ``windows`` setting."""
+    warnings.warn(WINDOWS_DEPRECATION, FutureWarning, stacklevel=3)
 
 
 def _toml_value(value: Any) -> str | None:
@@ -67,7 +79,6 @@ class ExperimentConfig:
     inputs: tuple[str, ...] = ()
     conventions: tuple[str, ...] = ("fixed_bulk",)
     ks: tuple[int, ...] = (1, 2, 3)
-    windows: tuple[int, ...] = (2,)
     logical_observables: str = "all"
     predictors: tuple[str, ...] = ("parities", "distance")
     oracles: tuple[str, ...] = ()
@@ -134,7 +145,6 @@ class ExperimentConfig:
             "inputs": list(self.inputs),
             "conventions": list(self.conventions),
             "ks": list(self.ks),
-            "windows": list(self.windows),
             "logical_observables": self.logical_observables,
             "predictors": list(self.predictors),
             "oracles": list(self.oracles),
@@ -174,13 +184,14 @@ class ExperimentConfig:
     # construction
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
+        if "windows" in data:
+            warn_windows_deprecated()
         known = {f for f in cls.__dataclass_fields__}
         kwargs: dict[str, Any] = {k: v for k, v in data.items() if k in known}
         for name in (
             "inputs",
             "conventions",
             "ks",
-            "windows",
             "predictors",
             "oracles",
             "noise_models",
@@ -202,4 +213,7 @@ class ExperimentConfig:
         return cls.from_dict(data)
 
     def with_overrides(self, **overrides: Any) -> ExperimentConfig:
+        if "windows" in overrides:
+            overrides.pop("windows")
+            warn_windows_deprecated()
         return replace(self, **overrides)
