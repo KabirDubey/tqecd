@@ -103,11 +103,10 @@ Installing and running
 The tool has its own ``pyproject.toml`` under ``tools/experiment`` and is not installed as part of
 ``tqecd``. It needs:
 
-* ``tqecd`` with windowed detector completion (the ``window=`` argument). The testbed calls
-  ``annotate_detectors_automatically(bare, window=window)`` for every row (see
-  ``tools/experiment/annotators.py``), so a ``tqecd`` whose function has no ``window`` parameter
-  raises ``TypeError`` there; each row is then recorded as ``annotate_fail`` and the run exits
-  non-zero;
+* ``tqecd`` with ``annotate_detectors_automatically``. The testbed inspects its signature once: if
+  it accepts ``window`` (windowed ``tqecd``), ``windows`` is swept as configured; if it does not
+  (the windowless build of PR #74), ``windows`` is ignored with one logged warning, the annotator
+  runs once per (gadget, convention, ``k``), and each row records ``window = -1``;
 * ``tqec`` providing ``tqec.orchestration`` (``[tool.uv.sources].tqec`` in
   ``tools/experiment/pyproject.toml`` is a relative path to one developer's checkout; point it at
   yours, or put your ``tqec`` on ``PYTHONPATH``);

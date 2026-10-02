@@ -101,10 +101,20 @@ class ExperimentConfig:
         (``ps``, ``noise_models``, ``max_shots``, ``decoders``) come from :attr:`simulation`, so the
         written manifest is directly usable by ``simulate_batch``.
         """
+        from dataclasses import fields
+
         from tqec.orchestration import BatchConfig
 
         sim = self.simulation
+        # Each connected component is its own gadget here. Builds where the batch keeps one
+        # circuit per input by default take ``split_components``; older builds always split.
+        split = (
+            {"split_components": True}
+            if "split_components" in {f.name for f in fields(BatchConfig)}
+            else {}
+        )
         return BatchConfig(
+            **split,
             conventions=self.conventions,
             ks=self.ks,
             ps=sim.ps if sim.enabled else self.ps,

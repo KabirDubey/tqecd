@@ -12,6 +12,7 @@ a bare circuit and does not preserve the logical observables.
 
 from __future__ import annotations
 
+import inspect
 import os
 import subprocess
 import sys
@@ -80,13 +81,37 @@ def reannotate_with(
     return reattach_observables(annotated, observables)
 
 
-def reannotate(circuit: stim.Circuit, *, window: int = 2) -> stim.Circuit:
-    """The experimental annotator: in-repo ``tqecd`` windowed ``annotate_detectors_automatically``."""
+#: ``ExperimentRow.window`` recorded when the installed ``tqecd`` has no ``window`` parameter
+#: (windowless build, e.g. tqecd PR #74), so ``config.windows`` does not apply. Same ``-1`` that
+#: unscored prep rows already carry, so the report and artifact paths (``..._w-1``) accept it.
+NO_WINDOW = -1
+
+
+def supports_window() -> bool:
+    """Whether the imported ``annotate_detectors_automatically`` accepts a ``window`` argument."""
     from tqecd.construction import annotate_detectors_automatically
 
-    return reannotate_with(
-        circuit, lambda bare: annotate_detectors_automatically(bare, window=window)
-    )
+    try:
+        return (
+            "window" in inspect.signature(annotate_detectors_automatically).parameters
+        )
+    except (TypeError, ValueError):
+        return True
+
+
+def reannotate(circuit: stim.Circuit, *, window: int = 2) -> stim.Circuit:
+    """The experimental annotator: in-repo ``tqecd`` ``annotate_detectors_automatically``.
+
+    ``window`` is forwarded only if the installed function accepts it (see :func:`supports_window`);
+    on a windowless build it is ignored.
+    """
+    from tqecd.construction import annotate_detectors_automatically
+
+    if supports_window():
+        return reannotate_with(
+            circuit, lambda bare: annotate_detectors_automatically(bare, window=window)
+        )
+    return reannotate_with(circuit, annotate_detectors_automatically)
 
 
 def native_annotation(native: stim.Circuit) -> stim.Circuit:

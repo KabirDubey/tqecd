@@ -361,6 +361,16 @@ def _score_and_render(
     work: list[tuple[Any, int, stim.Circuit, int]] = []
     last_manifest = None
 
+    windows: tuple[int, ...] = tuple(config.windows)
+    if not annotators.supports_window():
+        windows = (annotators.NO_WINDOW,)
+        log.warning(
+            "windows=%s ignored: the installed tqecd annotate_detectors_automatically has no "
+            "'window' parameter; annotating once per (unit, k), rows carry window=%d",
+            list(config.windows),
+            annotators.NO_WINDOW,
+        )
+
     for manifest in manifests:
         last_manifest = manifest
         for unit in manifest.units:
@@ -378,7 +388,7 @@ def _score_and_render(
                 continue
             for k, rel in unit.circuits.items():
                 native = stim.Circuit.from_file(manifest.run_dir / rel)
-                for window in config.windows:
+                for window in windows:
                     work.append((unit, k, native, window))
 
     iterator: Any = work

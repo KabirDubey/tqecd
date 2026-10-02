@@ -34,7 +34,8 @@ Experiment options
 
 ``windows``
     ``tqecd`` matching-window widths to sweep -- the ``tqecd`` knob under test, forwarded to
-    ``annotate_detectors_automatically(window=...)``. Default ``(2,)``.
+    ``annotate_detectors_automatically(window=...)``. Default ``(2,)``. Ignored (one run per
+    ``k``, rows record ``window = -1``) when the installed ``tqecd`` has no ``window`` parameter.
 
 ``logical_observables``
     How ``prepare_batch`` selects logical observables and fills open ports: ``"all"``,

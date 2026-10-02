@@ -43,9 +43,9 @@ def _assert_all_ready_pass(report):
     ready = _ready(report)
     assert ready, "expected at least one READY unit"
     for row in ready:
-        assert (
-            row.missing_parities == 0
-        ), f"{row.gadget_id}/{row.convention} k={row.k} missing"
+        assert row.missing_parities == 0, (
+            f"{row.gadget_id}/{row.convention} k={row.k} missing"
+        )
         assert row.distance == row.expected_distance, (
             f"{row.gadget_id}/{row.convention} k={row.k} distance "
             f"{row.distance} != {row.expected_distance}"
@@ -182,6 +182,10 @@ def test_reannotate_reuses_prepared_circuits(out_dir):
 
 # reannotate can re-score with a different tqecd window without recompiling
 def test_reannotate_window_override(out_dir):
+    from tools.experiment import annotators
+
+    if not annotators.supports_window():
+        pytest.skip("installed tqecd has no window parameter (windows are ignored)")
     config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1,), windows=(2,))
     run_experiment([cnot(Basis.Z)], config, out_dir)
     rescored = reannotate_run(out_dir, overrides={"windows": (3,)})
@@ -242,12 +246,12 @@ def test_gadget_visuals_for_pipeless_gadget(out_dir):
     report = run_experiment([memory(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
-    assert gv.get(
-        "block_graph_html"
-    ), "single-cube gadget must still get a 3D block-graph link"
-    assert gv.get("zx_png") or gv.get(
-        "zx_link"
-    ), "single-cube gadget must still get a ZX picture"
+    assert gv.get("block_graph_html"), (
+        "single-cube gadget must still get a 3D block-graph link"
+    )
+    assert gv.get("zx_png") or gv.get("zx_link"), (
+        "single-cube gadget must still get a ZX picture"
+    )
     # stim circuit diagrams are no longer embedded in any row
     assert all("diagrams" not in (r.visuals or {}) for r in report.rows)
 
@@ -263,9 +267,9 @@ def test_zx_linked_for_large_graph(out_dir, monkeypatch):
     report = run_experiment([cnot(Basis.Z)], config, out_dir)
     gid = _ready(report)[0].gadget_id
     gv = report.gadget_visuals.get(gid, {})
-    assert gv.get("zx_link") and not gv.get(
-        "zx_png"
-    ), "large graph must link the ZX, not inline it"
+    assert gv.get("zx_link") and not gv.get("zx_png"), (
+        "large graph must link the ZX, not inline it"
+    )
     assert (out_dir / gv["zx_link"]).is_file(), "the linked ZX PNG must exist on disk"
 
 
@@ -291,3 +295,30 @@ def test_simulate_run_measures_without_rebuild(out_dir):
     mcmc = report.meta.get("mcmc", {})
     assert mcmc.get("enabled") and mcmc.get("results", 0) >= 1
     assert mcmc.get("gadgets")  # one MCMC record per (gadget, convention)
+
+
+# A windowless tqecd (e.g. PR #74) must not raise TypeError; windows collapse to one row per (unit, k)
+def test_windowless_tqecd_runs_once_per_unit_k(out_dir, monkeypatch):
+    from tqecd import construction
+    from tools.experiment import annotators
+
+    real = construction.annotate_detectors_automatically
+    extra = {"window": 2} if annotators.supports_window() else {}
+    calls = []
+
+    def windowless(circuit):  # no ``window`` parameter, like the patched tqecd
+        calls.append(1)
+        return real(circuit, **extra)
+
+    monkeypatch.setattr(construction, "annotate_detectors_automatically", windowless)
+    assert not annotators.supports_window()
+    config = ExperimentConfig(conventions=("fixed_bulk",), ks=(1, 2), windows=(2, 3))
+    report = run_experiment([cnot(Basis.Z)], config, out_dir)
+    ready = _assert_all_ready_pass(report)
+    assert not [r for r in report.rows if r.status_kind == "annotate_fail"]
+    assert sorted((r.gadget_id, r.k) for r in ready) == sorted(
+        {(r.gadget_id, r.k) for r in ready}
+    )
+    assert {r.k for r in ready} == {1, 2}
+    assert {r.window for r in ready} == {annotators.NO_WINDOW}
+    assert len(calls) == 2  # once per k, not once per (k, window)
