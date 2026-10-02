@@ -172,12 +172,51 @@ the other representing a destruction flow), they will be stored in a data-struct
 will differentiate creation and destruction flows: ``FragmentFlow`` (or ``FragmentLoopFlow``).
 
 
+How detectors are found
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Detectors are found by *flow matching*, in this order.
+
+1. The flows of every fragment are built.
+2. Inside each fragment, flows that are fully collapsed within that fragment and
+   non-trivial give a detector directly, without any cover search.
+3. For each pair of adjacent fragments (``match_boundary_stabilizers``). A
+   ``REPEAT`` block counts as one unit in the pairing: its destruction flows are
+   those of its first body fragment and its creation flows those of its last:
+
+   a. Flows that anticommute with their collapsing operations are merged on
+      each side into commuting ones, using a *minimal commuting cover*
+      (``find_commuting_cover_on_target_qubits`` in ``tqecd.cover``): the fewest
+      anticommuting boundary stabilizers whose anticommutation vectors against
+      the collapsing Pauli product XOR to zero. The search is exact when the
+      null space of those vectors is small, and falls back to a heuristic above
+      that size, which may return a cover that is not the smallest.
+   b. A creation flow of the left fragment is matched one-to-one with a
+      destruction flow of the right fragment when they are equal after the
+      collapsing operations (flows with anticommuting operations are skipped).
+   c. Remaining flows are matched by an exact cover (``find_exact_cover``, on
+      the stabilizers after the collapsing operations), in both directions:
+      left creation flows covered by right destruction flows, then right
+      destruction flows covered by left creation flows. This step is skipped when
+      either side has no flow left, or when both sides have exactly one. The
+      detector's measurements are the union of the target's measurements and the
+      symmetric difference of the cover's measurements.
+
+``REPEAT`` blocks need one more step. A detector placed inside a loop body must
+be valid for every iteration. When a loop repeats more than once, the matcher
+checks that the detectors between the body's last and first fragments equal
+those between the previous fragment and the loop, and raises
+``TQECDException`` otherwise. When any ``TQECDException`` is raised on a
+circuit containing a loop, the circuit is *unrolled* and the same flow matching
+is run on it. Unrolling expands every ``REPEAT`` block and inserts a ``TICK``
+where one is missing at the boundaries between loop copies and between a loop
+and its neighbouring instructions. The result has no ``REPEAT`` blocks, so its
+size grows with the number of repetitions. If the unrolled circuit does not
+satisfy the input requirements, the original exception is re-raised. An
+exception raised while matching the unrolled circuit propagates as is.
+
 Example
 ~~~~~~~
-
-The flow-matching procedure built on these concepts finds most, but not all,
-detectors; the additive pass recovering the rest is described in
-:doc:`detector_windowing`.
 
 See the accompanying notebook for an example of how to perform automatic detector computation:
 

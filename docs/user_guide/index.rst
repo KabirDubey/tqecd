@@ -10,7 +10,6 @@ User Guide
    Installation <installation>
    Quick start <quick_start>
    Basic concepts <basic_concepts>
-   Windowed detector completion <detector_windowing>
    Example <../media/detectors/detector_finding_illustration.ipynb>
 
 .. toctree::
