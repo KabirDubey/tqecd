@@ -13,7 +13,7 @@ itself: `tqecd` packages only `src/`, and the optional `tqec` dependency is decl
 ```bash
 python -m tools.experiment --gallery cnot --k 1,2      # one gadget
 python -m tools.experiment --gallery all --k 1,2       # every gadget in tqec.gallery
-python -m tools.experiment --config tools/experiment/configs/manhattan_sensitivity.toml
+python -m tools.experiment --config "tools/experiment/configs/y_half_cube_bulk_k=123.toml"
 ```
 
 ```python

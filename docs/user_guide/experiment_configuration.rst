@@ -27,10 +27,6 @@ Experiment options
     Code-distance scale factors. Each gadget is generated once per ``k``; the circuit grows with
     ``k``. Default ``(1, 2, 3)``.
 
-``windows``
-    ``tqecd`` matching-window widths to sweep -- the ``tqecd`` knob under test, forwarded to
-    ``annotate_detectors_automatically(window=...)``. Default ``(2,)``.
-
 ``logical_observables``
     How ``prepare_batch`` selects logical observables and fills open ports: ``"all"``,
     ``"all_possible"``, ``"area_minimized"`` or ``"random"``. Default ``"all"``.
@@ -41,8 +37,7 @@ Experiment options
 
 ``oracles``
     Names of oracle *alternate annotators* to score side by side (see `Oracles`_). Two are built
-    in: ``"native"`` (tqec's own annotation) and ``"tqecd_main"`` (the windowless main-branch
-    ``tqecd``). Default ``()`` -- just the experimental annotator.
+    in: ``"native"`` (tqec's own annotation) and ``"tqecd_main"`` (the main-branch ``tqecd``). Default ``()`` -- just the experimental annotator.
 
 ``noise_models``
     The noise **model** the ``distance`` predictor applies before its (analytic) minimum-weight
@@ -100,7 +95,6 @@ TOML file format
     [experiment]
     conventions = ["fixed_bulk", "fixed_boundary"]
     ks = [1, 2, 3]
-    windows = [2]
     predictors = ["parities", "distance"]
 
     [experiment.simulation]
@@ -124,7 +118,7 @@ Load and run it:
 Oracles
 -------
 
-The experimental subject is always ``tqecd``'s windowed ``annotate_detectors_automatically``. An
+The experimental subject is always the installed ``tqecd``'s ``annotate_detectors_automatically``. An
 **oracle is an alternate annotator**: it produces its own annotation of the same gadget, which is
 scored on the *same* metric (distance vs ``2k+1``, missing parities), checked for logical
 equivalence to the experimental one (their ``DETECTOR`` / ``OBSERVABLE`` parity subspaces span the
@@ -142,11 +136,8 @@ Two ship built in:
 
 .. code-block:: bash
 
-    # spatial Z/X junctions: tqecd windowing vs native vs windowless main-branch tqecd
+    # spatial Z/X junctions: installed tqecd vs native vs main-branch tqecd
     python -m tools.experiment --config tools/experiment/configs/spatial_junction_comparison.toml
-
-On the spatial junctions this shows the windowed ``tqecd`` failing at ``k=2`` while ``native`` and
-``tqecd_main`` both reach ``2k+1`` -- isolating windowing as the regression.
 
 For your own reference, two kinds are provided:
 
