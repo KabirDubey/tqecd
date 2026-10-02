@@ -13,7 +13,7 @@ itself: `tqecd` packages only `src/`, and the optional `tqec` dependency is decl
 ```bash
 python -m tools.experiment --gallery cnot --k 1,2      # one gadget
 python -m tools.experiment --gallery all --k 1,2       # every gadget in tqec.gallery
-python -m tools.experiment --config tools/experiment/configs/manhattan_sensitivity.toml
+python -m tools.experiment --config tools/experiment/configs/ler.toml
 ```
 
 ```python
@@ -29,9 +29,13 @@ print(report.to_text())   # also writes out/report.{json,html,txt}
 
 - **Predictors** (always): `missing_parities` (GF(2) flow-completeness) and
   `shortest_graphlike_error` vs `2k+1` -- absolute properties of a single circuit.
-- **Oracles** (optional): user-supplied reference annotations, compared up to logical symmetry.
-  None ship by default -- `tqec`'s native annotation is not a reliable reference for most gadgets.
+- **Oracles** (optional, off unless selected): alternate annotators scored on the same metrics and
+  compared up to logical symmetry. Built in: `native` (tqec's own annotation) and `tqecd_main`
+  (main-branch `tqecd`, run out-of-process); you can register your own.
 - **Simulation** (opt-in): LER-vs-p plots and Lambda factors via `simulate_batch`.
+
+The tool is a command-line program with an HTML report (`report.html`), not a terminal UI. Its
+options and report may be revised.
 
 ## Documentation
 

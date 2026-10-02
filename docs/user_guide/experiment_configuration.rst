@@ -3,6 +3,11 @@
 Experiment configuration
 ========================
 
+.. note::
+
+   The gadget testbed is a development tool and its options may be revised. The inputs named in
+   ``inputs`` are described in :ref:`experiment_workflow`.
+
 An experiment is driven by an ``ExperimentConfig``. Build it in Python, or load it from a TOML
 file with ``ExperimentConfig.from_toml``. Every option has a sensible default, so an empty config
 is a valid (CNOT smoke) run.
@@ -16,7 +21,7 @@ Experiment options
 ``inputs``
     The gadgets this run scores, so a config fully defines its own experiment (no CLI ``--gallery``
     needed). Each entry is a ``tqec.gallery`` name (``"cnot"``, ...), ``"all"``, a tool-provided
-    batch (``"hadamard_arrangements"``, ``"spatial_junctions"``), or a ``.dae`` / ``.bgraph`` path.
+    batch (``"hadamard_arrangements"``, ``"spatial_junctions"``, ``"y_half_cube"``), or a ``.dae`` / ``.bgraph`` path.
     Default ``()`` (the CLI supplies the inputs instead).
 
 ``conventions``
@@ -68,7 +73,7 @@ Experiment options
     A ``SimulationConfig`` (below) for the optional MCMC sampling stage.
 
 Simulation options
------------------
+------------------
 
 Set under ``[experiment.simulation]`` in TOML, or via ``SimulationConfig``. Off by default.
 
@@ -93,7 +98,7 @@ Set under ``[experiment.simulation]`` in TOML, or via ``SimulationConfig``. Off 
     Compute the Lambda suppression factor per gadget. Default ``false``.
 
 TOML file format
----------------
+----------------
 
 .. code-block:: toml
 
@@ -136,17 +141,19 @@ Two ship built in:
 * ``native`` -- ``tqec``'s own native annotation (the circuit ``prepare_batch`` wrote), every
   convention.
 * ``tqecd_main`` -- the main-branch ``tqecd`` ``annotate_detectors_automatically``,
-  run out-of-process; it isolates the effect of your change to ``tqecd``.
-  Applies only when the main-branch
-  worktree is present (``.tqecd-main`` or ``TQECD_MAIN_SRC``).
+  run out-of-process; it isolates the effect of your change to ``tqecd``. It needs the
+  main-branch source: a worktree at ``.tqecd-main`` in the directory that contains this repository checkout
+  (see ``DEFAULT_MAIN_SRC`` in ``tools/experiment/annotators.py``) or the ``TQECD_MAIN_SRC`` environment
+  variable. When selected but missing, it is not skipped: the row records the error in that
+  oracle's cell.
 
 .. code-block:: bash
 
     # spatial Z/X junctions: tqecd windowing vs native vs windowless main-branch tqecd
     python -m tools.experiment --config tools/experiment/configs/spatial_junction_comparison.toml
 
-On the spatial junctions this shows the windowed ``tqecd`` failing at ``k=2`` while ``native`` and
-``tqecd_main`` both reach ``2k+1`` -- isolating windowing as the regression.
+This config is meant to isolate whether windowing regresses the spatial junctions at ``k>=2`` (its
+header comment states that it does); the outcome was not re-run for this page.
 
 For your own reference, two kinds are provided:
 
