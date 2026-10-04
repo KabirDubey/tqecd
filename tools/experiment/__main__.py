@@ -10,6 +10,8 @@ Examples::
     python -m tools.experiment --reannotate experiment_out            # re-score from disk, no recompile
     python -m tools.experiment --simulate experiment_out --noise-models si1000  # LER, no rebuild
     python -m tools.experiment --clean experiment_out                # delete a run's output + logs
+    python -m tools.experiment --check circuit.stim --expected-distance 5   # one circuit
+    python -m tools.experiment --check native.stim moved.stim         # two circuits that should agree
 
 ``--gallery all`` runs every gadget in ``tqec.gallery`` in one experiment; ``--gallery <name>``
 runs a single one; ``--list-gallery`` prints the available names. ``--render <run_dir>`` rebuilds
@@ -18,6 +20,9 @@ runs a single one; ``--list-gallery`` prints the available names. ``--render <ru
 (no recompile); pass ``--oracles`` to re-score with different oracles.
 ``--simulate <run_dir>`` measures a run's circuits (LER-vs-p plots) under ``--noise-models`` /
 ``--ps`` without rebuilding, so two noise models can be compared on identical circuits.
+``--check <a.stim> [<b.stim>]`` checks one circuit (deterministic, missing parities, distance against
+``--expected-distance``) or compares two that should behave identically; ``--noise-models`` and
+``--ps`` then take a single value each.
 """
 
 from __future__ import annotations
@@ -34,6 +39,44 @@ from tools.experiment.core import run_experiment
 
 def _ints(text: str) -> tuple[int, ...]:
     return tuple(int(x) for x in text.split(",") if x.strip())
+
+
+def _check_files(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """``--check``: print the check of one circuit, or of two circuits and their comparison."""
+    from tools.experiment.check import (
+        DEFAULT_NOISE_MODEL,
+        DEFAULT_P,
+        check_circuit,
+        compare_circuits,
+    )
+
+    if len(args.check) > 2:
+        parser.error("--check takes one or two .stim files")
+    for flag, values in (("--noise-models", args.noise_models), ("--ps", args.ps)):
+        if values and len(values) != 1:
+            parser.error(f"--check takes a single value for {flag}")
+    kwargs: dict[str, Any] = {
+        "expected_distance": args.expected_distance,
+        "noise_model": args.noise_models[0]
+        if args.noise_models
+        else DEFAULT_NOISE_MODEL,
+        "p": args.ps[0] if args.ps else DEFAULT_P,
+    }
+    if len(args.check) == 1:
+        result = check_circuit(args.check[0], **kwargs)
+        print(f"{args.check[0]}: {result.summary()}")
+        return 0 if result.passed else 1
+    comparison = compare_circuits(*args.check, **kwargs)
+    print(f"{args.check[0]}: {comparison.a.summary()}")
+    print(f"{args.check[1]}: {comparison.b.summary()}")
+    if comparison.equivalent:
+        print(
+            "equivalent: same determinism, parities, distance and DEM (ignoring coordinates)"
+        )
+    else:
+        print("NOT equivalent: " + "; ".join(comparison.differences()))
+    ok = comparison.equivalent and comparison.a.passed and comparison.b.passed
+    return 0 if ok else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,6 +122,19 @@ def main(argv: list[str] | None = None) -> int:
         metavar="RUN_DIR",
         help="delete a run directory's generated output and logs (default: experiment_out)",
     )
+    source.add_argument(
+        "--check",
+        type=Path,
+        nargs="+",
+        metavar="STIM",
+        help="check one .stim circuit, or compare two that should behave identically",
+    )
+    parser.add_argument(
+        "--expected-distance",
+        dest="expected_distance",
+        type=int,
+        help="distance a --check circuit must have",
+    )
     parser.add_argument("--k", type=_ints, help="comma-separated ks, e.g. 1,2,3")
     parser.add_argument("--conventions", type=lambda s: tuple(s.split(",")))
     parser.add_argument(
@@ -109,6 +165,9 @@ def main(argv: list[str] | None = None) -> int:
             "'all' runs every canonical gallery gadget:", ", ".join(gadgets.GALLERY_ALL)
         )
         return 0
+
+    if args.check:
+        return _check_files(parser, args)
 
     if args.clean is not None:
         import shutil
