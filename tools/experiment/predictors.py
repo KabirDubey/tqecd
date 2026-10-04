@@ -107,6 +107,10 @@ def describe_missing_parities(circuit: stim.Circuit) -> str:
     return f"incomplete: {n} deterministic parit{'y' if n == 1 else 'ies'} not attached"
 
 
+#: Start of stim's error message when the search finds no graphlike logical error at all.
+_NO_LOGICAL_ERROR = "Failed to find any graphlike logical errors"
+
+
 def shortest_graphlike_error(
     noisy_circuit: stim.Circuit, *, ignore_ungraphlike_errors: bool = False
 ) -> int | None:
@@ -121,11 +125,19 @@ def shortest_graphlike_error(
     model at some physical error rate ``p`` to instantiate the error mechanisms, but the returned
     weight (the distance) depends only on the noise *model*, not the ``p`` value -- any ``p`` in
     ``(0, 1)`` gives the same result.
+
+    Raises:
+        ValueError: if stim cannot build the detector error model, for example because a
+            detector is not deterministic or an error cannot be decomposed into graphlike parts.
+            Only "no graphlike logical error" is reported as ``None``.
     """
     try:
         error = noisy_circuit.shortest_graphlike_error(
             ignore_ungraphlike_errors=ignore_ungraphlike_errors
         )
-    except ValueError:
-        return None
+    except ValueError as exc:
+        if str(exc).startswith(_NO_LOGICAL_ERROR):
+            return None
+        raise
     return len(error)
+
