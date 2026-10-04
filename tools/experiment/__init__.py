@@ -33,6 +33,13 @@ def _isolate_detector_db() -> None:
 
 _isolate_detector_db()
 
+from tools.experiment.check import (  # noqa: E402
+    CircuitCheck,
+    CircuitComparison,
+    apply_noise,
+    check_circuit,
+    compare_circuits,
+)
 from tools.experiment.config import ExperimentConfig, SimulationConfig  # noqa: E402
 from tools.experiment.core import (  # noqa: E402
     reannotate_run,
@@ -43,6 +50,11 @@ from tools.experiment.core import (  # noqa: E402
 from tools.experiment.report import ExperimentReport, ExperimentRow  # noqa: E402
 
 __all__ = [
+    "CircuitCheck",
+    "CircuitComparison",
+    "apply_noise",
+    "check_circuit",
+    "compare_circuits",
     "ExperimentConfig",
     "SimulationConfig",
     "ExperimentReport",

@@ -55,6 +55,7 @@ class ExperimentRow:
     k: int
     status: str
     status_kind: str = NOT_SCORED
+    deterministic: bool | None = None
     missing_parities: int | None = None
     parities_ok: bool | None = None
     distance: int | None = None

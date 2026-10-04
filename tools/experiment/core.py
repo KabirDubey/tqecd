@@ -19,7 +19,8 @@ from typing import Any
 
 import stim
 
-from tools.experiment import annotators, predictors, runlog, visuals
+from tools.experiment import annotators, runlog, visuals
+from tools.experiment.check import CircuitCheck, check_circuit
 from tools.experiment.config import ExperimentConfig
 from tools.experiment.report import (
     ANNOTATE_FAIL,
@@ -36,30 +37,10 @@ def _expected_distance(expr: str, k: int) -> int:
     return int(eval(expr, {"__builtins__": {}}, {"k": k}))
 
 
-def _noisy(circuit: stim.Circuit, noise_model: str, p: float) -> stim.Circuit:
-    from tqec.utils.noise_model import NoiseModel
-
-    factory = getattr(NoiseModel, noise_model, None)
-    if factory is None:
-        factory = NoiseModel.uniform_depolarizing
-    return factory(p).noisy_circuit(circuit)
-
-
 def _observable_label(unit: Any) -> str:
     """The simulated observable(s) as a compact string of external stabilizers."""
     observables = getattr(unit, "logical_observables", ()) or ()
     return ", ".join(o.external_stabilizer for o in observables)
-
-
-def _failure_reason(row: ExperimentRow) -> str:
-    """A one-line reason a scored row failed its predictors, for the report's Notes column."""
-    reasons: list[str] = []
-    if row.parities_ok is False and row.missing_parities is not None:
-        plural = "y" if row.missing_parities == 1 else "ies"
-        reasons.append(f"{row.missing_parities} missing parit{plural}")
-    if row.distance_ok is False:
-        reasons.append(f"distance {row.distance} != expected {row.expected_distance}")
-    return "; ".join(reasons)
 
 
 def _status_kind(unit_status: str, predictors_pass: bool | None) -> str:
@@ -73,13 +54,29 @@ def _status_kind(unit_status: str, predictors_pass: bool | None) -> str:
     return NOT_SCORED
 
 
+def _check(circuit: stim.Circuit, k: int, config: ExperimentConfig) -> CircuitCheck:
+    """Run :func:`check_circuit` with the run's predictors, noise model and expected distance."""
+    return check_circuit(
+        circuit,
+        expected_distance=(
+            _expected_distance(config.expected_distance, k)
+            if config.run_distance
+            else None
+        ),
+        noise_model=config.noise_models[0],
+        p=config.ps[0],
+        check_parities=config.run_parities,
+        check_distance=config.run_distance,
+    )
+
+
 def _score(
-    native: stim.Circuit,
     reannotated: stim.Circuit,
     unit: Any,
     k: int,
     config: ExperimentConfig,
 ) -> ExperimentRow:
+    result = _check(reannotated, k, config)
     row = ExperimentRow(
         gadget_id=unit.gadget_id,
         source=getattr(unit, "source", ""),
@@ -88,24 +85,18 @@ def _score(
         k=k,
         status=unit.status,
         observable=_observable_label(unit),
+        deterministic=result.deterministic,
+        missing_parities=result.missing_parities,
+        parities_ok=result.parities_ok,
+        distance=result.distance,
+        expected_distance=result.expected_distance,
+        distance_ok=result.distance_ok,
     )
-
-    if config.run_parities:
-        row.missing_parities = predictors.count_missing_parities(reannotated)
-        row.parities_ok = row.missing_parities == 0
-
-    if config.run_distance:
-        row.expected_distance = _expected_distance(config.expected_distance, k)
-        noisy = _noisy(reannotated, config.noise_models[0], config.ps[0])
-        row.distance = predictors.shortest_graphlike_error(noisy)
-        row.distance_ok = row.distance == row.expected_distance
-
-    checks = [ok for ok in (row.parities_ok, row.distance_ok) if ok is not None]
-    row.predictors_pass = all(checks) if checks else None
+    if config.run_parities or config.run_distance:
+        row.predictors_pass = result.passed
     row.status_kind = _status_kind(unit.status, row.predictors_pass)
     if row.predictors_pass is False:
-        row.notes = _failure_reason(row)
-
+        row.notes = "; ".join(result.failure_reasons())
     return row
 
 
@@ -146,13 +137,15 @@ def _score_oracles(
                 else None
             )
         }
+        result = _check(circuit, k, config)
+        res["deterministic"] = result.deterministic
         if config.run_parities:
-            res["missing_parities"] = predictors.count_missing_parities(circuit)
+            res["missing_parities"] = result.missing_parities
         if config.run_distance:
-            noisy = _noisy(circuit, config.noise_models[0], config.ps[0])
-            distance = predictors.shortest_graphlike_error(noisy)
-            res["distance"] = distance
-            res["distance_ok"] = distance == row.expected_distance
+            res["distance"] = result.distance
+            res["distance_ok"] = result.distance_ok
+        if not result.passed:
+            res["notes"] = "; ".join(result.failure_reasons())
         cell = artifacts / row.gadget_id / f"{row.convention}_k{row.k}"
         try:
             path = visuals.write_circuit(circuit, cell / f"oracle_{name}.stim")
@@ -387,7 +380,7 @@ def _score_and_render(
         started = time.perf_counter()
         try:
             reannotated = annotators.reannotate(native)
-            row = _score(native, reannotated, unit, k, config)
+            row = _score(reannotated, unit, k, config)
             row.runtime_s = time.perf_counter() - started
             _score_oracles(
                 row, reannotated, unit, k, native, config, oracles, artifacts, out_dir
