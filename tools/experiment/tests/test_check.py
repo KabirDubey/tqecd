@@ -211,3 +211,29 @@ def test_core_scores_through_check_circuit():
     row = _score(_memory(3), unit, 1, config)
     assert row.deterministic and row.distance == 3 and row.distance_ok
     assert row.missing_parities == 0 and row.predictors_pass and row.notes == ""
+
+
+def test_extra_unused_detector_is_not_equivalent():
+    a = stim.Circuit("R 0\nM 0\nDETECTOR rec[-1]")
+    b = stim.Circuit("R 0\nM 0\nDETECTOR rec[-1]\nDETECTOR rec[-1]")
+    comparison = compare_circuits(a, b, noise_model=None)
+    assert comparison.same_dem_without_coords is False
+    assert "num_detectors: 1 != 2" in comparison.differences()
+
+
+def test_compare_reports_a_failing_noise_model_instead_of_raising():
+    def broken_noise(circuit: stim.Circuit) -> stim.Circuit:
+        return apply_noise(circuit) + NON_DETERMINISTIC
+
+    comparison = compare_circuits(_memory(3), _memory(3), noise_model=broken_noise)
+    assert comparison.same_dem_without_coords is None
+    assert not comparison.equivalent
+
+
+def test_core_parity_only_run_needs_no_noise_settings():
+    unit = SimpleNamespace(
+        gadget_id="g", convention="fixed_bulk", status="ready", logical_observables=()
+    )
+    config = ExperimentConfig(predictors=("parities",), noise_models=(), ps=())
+    row = _score(_memory(3), unit, 1, config)
+    assert row.missing_parities == 0 and row.distance is None and row.predictors_pass

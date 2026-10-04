@@ -56,17 +56,16 @@ def _status_kind(unit_status: str, predictors_pass: bool | None) -> str:
 
 def _check(circuit: stim.Circuit, k: int, config: ExperimentConfig) -> CircuitCheck:
     """Run :func:`check_circuit` with the run's predictors, noise model and expected distance."""
+    if not config.run_distance:
+        return check_circuit(
+            circuit, check_parities=config.run_parities, check_distance=False
+        )
     return check_circuit(
         circuit,
-        expected_distance=(
-            _expected_distance(config.expected_distance, k)
-            if config.run_distance
-            else None
-        ),
+        expected_distance=_expected_distance(config.expected_distance, k),
         noise_model=config.noise_models[0],
         p=config.ps[0],
         check_parities=config.run_parities,
-        check_distance=config.run_distance,
     )
 
 

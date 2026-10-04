@@ -242,11 +242,14 @@ def check_circuit(
 
 
 def _coordinate_free_dem(dem: stim.DetectorErrorModel) -> stim.DetectorErrorModel:
-    """``dem`` flattened, without the ``detector`` coordinate declarations."""
+    """``dem`` flattened, with every ``detector`` declaration stripped of its coordinates."""
     out = stim.DetectorErrorModel()
     for instruction in dem.flattened():
-        if instruction.type != "detector":
-            out.append(instruction)
+        if instruction.type == "detector":
+            instruction = stim.DemInstruction(
+                "detector", [], instruction.targets_copy()
+            )
+        out.append(instruction)
     return out
 
 
@@ -259,7 +262,8 @@ class CircuitComparison:
         same_dem_without_coords: the two noisy detector error models are identical once flattened
             and stripped of detector coordinates (a structural comparison: same detector and
             observable counts and the same error instructions in the same order). ``None`` when a
-            model could not be built (a circuit is not deterministic).
+            model could not be built (a circuit is not deterministic, or stim failed on the noisy
+            circuit).
     """
 
     a: CircuitCheck
@@ -269,12 +273,19 @@ class CircuitComparison:
     def differences(self) -> list[str]:
         """One short line per property on which the two circuits differ."""
         diffs: list[str] = []
-        for name in ("deterministic", "missing_parities", "distance", "distance_error"):
+        for name in (
+            "num_detectors",
+            "num_observables",
+            "deterministic",
+            "missing_parities",
+            "distance",
+            "distance_error",
+        ):
             va, vb = getattr(self.a, name), getattr(self.b, name)
             if va != vb:
                 diffs.append(f"{name}: {va} != {vb}")
         if self.same_dem_without_coords is None:
-            diffs.append("detector error models not comparable (not deterministic)")
+            diffs.append("detector error models not comparable")
         elif not self.same_dem_without_coords:
             diffs.append("detector error models differ (ignoring coordinates)")
         return diffs
@@ -312,7 +323,11 @@ def compare_circuits(
     check_a, check_b = check_circuit(a, **kwargs), check_circuit(b, **kwargs)
     same_dem: bool | None = None
     if check_a.deterministic and check_b.deterministic:
-        dem_a = apply_noise(a, noise_model, p).detector_error_model()
-        dem_b = apply_noise(b, noise_model, p).detector_error_model()
-        same_dem = _coordinate_free_dem(dem_a) == _coordinate_free_dem(dem_b)
+        try:
+            dem_a = apply_noise(a, noise_model, p).detector_error_model()
+            dem_b = apply_noise(b, noise_model, p).detector_error_model()
+        except ValueError:
+            pass  # the failure is in the checks' distance_error when the distance was searched
+        else:
+            same_dem = _coordinate_free_dem(dem_a) == _coordinate_free_dem(dem_b)
     return CircuitComparison(check_a, check_b, same_dem)
