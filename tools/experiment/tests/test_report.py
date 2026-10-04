@@ -134,6 +134,19 @@ def test_oracle_columns_and_group_render():
     assert "a.stim" in html  # the oracle's stim link
 
 
+def test_text_report_marks_unscorable_and_erroring_oracles():
+    # A native circuit with non-deterministic detectors has no distance; "-" would read as
+    # "not run", so the text report says FAIL (or error when the oracle raised).
+    report = _report()
+    report.meta = {"oracles": ["native"]}
+    report.rows[0].oracle_results = {"native": {"distance": None, "distance_ok": False}}
+    report.rows[1].oracle_results = {"native": {"error": "boom"}}
+    lines = report.to_text().splitlines()
+    assert lines[0].split()[-1] == "native:dist"
+    assert lines[2].split()[-1] == "FAIL"
+    assert lines[3].split()[-1] == "error"
+
+
 def test_mcmc_section_renders_when_present():
     # items 5b/6/12: an MCMC section (per-gadget plot + setup links) appears only when sampled.
     report = _report()

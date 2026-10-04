@@ -159,11 +159,9 @@ class ExperimentReport:
             cols.append(
                 (
                     f"{name}:dist",
-                    (
-                        lambda n: (
-                            lambda r: (r.oracle_results.get(n) or {}).get("distance")
-                        )
-                    )(name),
+                    (lambda n: lambda r: _oracle_distance(r.oracle_results.get(n)))(
+                        name
+                    ),
                 )
             )
         return cols
@@ -531,6 +529,17 @@ class ExperimentReport:
 
 
 # ---- module cell helpers ----------------------------------------------------------------------
+def _oracle_distance(result: dict[str, Any] | None) -> Any:
+    """The oracle's distance, or why it has none: ``error`` (it raised) or ``FAIL`` (not scorable)."""
+    if not result:
+        return None
+    if "error" in result:
+        return "error"
+    if result.get("distance") is None and result.get("distance_ok") is False:
+        return "FAIL"
+    return result.get("distance")
+
+
 def _fmt(value: Any) -> str:
     if value is None:
         return "-"
